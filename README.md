@@ -1,4 +1,3 @@
-```markdown
 # OpenMachineCore
 
 OpenMachineCore is a Go-based automation platform for industrial machine control. It combines a Modbus TCP device layer, a workflow engine, and a machine state controller with REST and gRPC APIs.
