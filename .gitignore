@@ -85,3 +85,6 @@ __debug_bin
 # Local development
 local/
 scratch/
+
+# Generated protobuf files
+api/proto/*.pb.go

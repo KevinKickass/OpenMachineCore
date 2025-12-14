@@ -3,8 +3,12 @@ FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
-RUN apk add --no-cache git make
+# Install dependencies including protoc
+RUN apk add --no-cache git make protobuf protobuf-dev
+
+# Install Go protobuf plugins
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -12,6 +16,9 @@ RUN go mod download
 
 # Copy source code
 COPY . .
+
+# Generate protobuf code
+RUN make proto
 
 # Build binary
 RUN make build

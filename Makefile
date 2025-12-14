@@ -1,5 +1,5 @@
 # Makefile
-.PHONY: proto build run test clean docker-up docker-down
+.PHONY: proto build run test clean docker docker-build docker-run docker-compose-up docker-compose-down
 
 PROTOC_INCLUDES = -I. \
 	-I./third_party/googleapis \
@@ -24,10 +24,20 @@ test:
 clean:
 	rm -rf bin/
 
-docker-up:
+docker: docker-build
+
+docker-build:
+	docker build -t openmachinecore:latest .
+
+docker-run:
+	docker run -p 8080:8080 -p 50051:50051 \
+		-v $(PWD)/configs:/app/configs \
+		openmachinecore:latest
+
+docker-compose-up:
 	docker-compose up -d
 
-docker-down:
+docker-compose-down:
 	docker-compose down
 
 migrate-up:
