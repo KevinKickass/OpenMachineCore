@@ -1,6 +1,13 @@
 # OpenMachineCore
 
-OpenMachineCore is a Go-based automation platform for industrial machine control. It combines a Modbus TCP device layer, a workflow engine, and a machine state controller with REST and gRPC APIs.
+[![Release Build](https://github.com/KevinKickass/OpenMachineCore/actions/workflows/release.yml/badge.svg)](https://github.com/KevinKickass/OpenMachineCore/actions)
+[![Latest Release](https://img.shields.io/github/v/release/KevinKickass/OpenMachineCore?sort=semver)](https://github.com/KevinKickass/OpenMachineCore/releases)
+
+OpenMachineCore (Backend) is a Go-based automation platform for industrial machine control. It combines a Modbus TCP - EtherCat and more planned - device layer, a workflow engine, and a machine state controller with REST, Websocket and gRPC APIs. 
+OpenMachineCore HMI is coming soon for displaying machine state and give the user a place for basic controling of the machine
+OpenMachineCore Configurator is coming soon to to help set up workflows, devices and so on
+
+You can also use your own HMI and use the APIs to control/display the machine states and devices
 
 ## Still work in progress - Not production ready
 
@@ -17,6 +24,7 @@ OpenMachineCore is a Go-based automation platform for industrial machine control
 - Modbus TCP device management with logical I/O mapping
 - REST API for devices, workflows, machine control, and modules
 - gRPC streaming for workflow execution events
+- Websocket streaming for status, I/O and workflow updates
 - PostgreSQL-backed storage for devices, workflows, and executions
 
 ## Architecture Overview
@@ -32,11 +40,13 @@ LifecycleManager (internal/system)
 └── Machine Controller (internal/machine)
 
 APIs:
-
 - REST (internal/api/rest)
 - gRPC (internal/api/grpc, api/proto)
+- Websocket Hub (internal/api/websocket)
+
 Storage:
 - PostgreSQL (internal/storage)
+
 Modbus:
 - internal/modbus
 

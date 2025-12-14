@@ -17,6 +17,7 @@ import (
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/engine"
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/executor"
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/streaming"
+	ws "github.com/KevinKickass/OpenMachineCore/internal/api/websocket"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -33,6 +34,7 @@ type LifecycleManager struct {
 	workflowService   *streaming.WorkflowService
 	machineController *machine.Controller
 	logger            *zap.Logger
+	wsHub 			  *ws.Hub
 
 	restServer *rest.Server
 	grpcServer *grpc.Server
@@ -61,11 +63,12 @@ func NewLifecycleManager(
 	// Initialize Workflow Engine components
 	eventStreamer := streaming.NewEventStreamer()
 	stepExecutor := executor.NewStepExecutor(deviceManager, storage)
-	workflowEngine := engine.NewEngine(storage, stepExecutor, eventStreamer, logger)
+	wsHub := ws.NewHub(logger)
+	workflowEngine := engine.NewEngine(storage, stepExecutor, eventStreamer, logger, wsHub)
 	workflowService := streaming.NewWorkflowService(eventStreamer)
 
 	// Initialize Machine Controller
-	machineController := machine.NewController(logger, workflowEngine, storage)
+	machineController := machine.NewController(logger, workflowEngine, storage, wsHub)
 
 	return &LifecycleManager{
 		config:            cfg,
@@ -76,6 +79,7 @@ func NewLifecycleManager(
 		workflowService:   workflowService,
 		machineController: machineController,
 		logger:            logger,
+		wsHub: 			   wsHub,
 		currentState:      StateInitializing,
 		shutdownChan:      make(chan struct{}),
 		statusListeners:   make([]chan SystemStatus, 0),
@@ -112,6 +116,9 @@ func (lm *LifecycleManager) Start() error {
 		lm.setError(fmt.Errorf("failed to start REST API: %w", err))
 		return err
 	}
+
+	// Start WebSocket hub
+	go lm.wsHub.Run()
 
 	// State: Running
 	lm.setState(StateRunning)
@@ -263,7 +270,7 @@ func (lm *LifecycleManager) startGRPCServer() error {
 }
 
 func (lm *LifecycleManager) startRESTServer() error {
-	lm.restServer = rest.NewServer(lm.config, lm, lm.logger)
+	lm.restServer = rest.NewServer(lm.config, lm, lm.logger, lm.wsHub)
 	return lm.restServer.Start()
 }
 
@@ -456,4 +463,9 @@ func (lm *LifecycleManager) Config() *config.Config {
 // WorkflowEngine returns the workflow engine
 func (lm *LifecycleManager) WorkflowEngine() *engine.Engine {
 	return lm.workflowEngine
+}
+
+// Expose hub for other components to broadcast messages
+func (lm *LifecycleManager) GetWebSocketHub() *ws.Hub {
+	return lm.wsHub
 }

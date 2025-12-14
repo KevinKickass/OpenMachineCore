@@ -9,6 +9,7 @@ import (
 
 	"github.com/KevinKickass/OpenMachineCore/internal/storage"
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/engine"
+	"github.com/KevinKickass/OpenMachineCore/internal/api/websocket"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -17,6 +18,7 @@ type Controller struct {
 	logger         *zap.Logger
 	workflowEngine *engine.Engine
 	storage        *storage.PostgresClient
+	wsHub           *websocket.Hub
 
 	mu               sync.RWMutex
 	currentState     State
@@ -34,8 +36,10 @@ func NewController(
 	logger *zap.Logger,
 	workflowEngine *engine.Engine,
 	storage *storage.PostgresClient,
+	wsHub *websocket.Hub,
 ) *Controller {
 	return &Controller{
+		wsHub:          wsHub,
 		logger:         logger,
 		workflowEngine: workflowEngine,
 		storage:        storage,
@@ -259,13 +263,22 @@ func (c *Controller) monitorProductionWorkflow(execID uuid.UUID) {
 func (c *Controller) setState(state State, errorMsg string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
+	
+	previousState := c.currentState
 	c.currentState = state
 	c.errorMessage = errorMsg
 
 	c.logger.Info("Machine state changed",
 		zap.String("state", string(state)),
 		zap.String("error", errorMsg))
+
+	// Broadcast state change via WebSocket
+	if c.wsHub != nil {
+		c.wsHub.Broadcast(websocket.NewMachineStateMessage(
+			string(state), 
+			string(previousState),
+		))
+	}
 }
 
 func (c *Controller) GetStatus() MachineStatus {
