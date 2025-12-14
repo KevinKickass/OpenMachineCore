@@ -4,7 +4,7 @@
 // 	protoc        v3.19.6
 // source: api/proto/common.proto
 
-package v1
+package proto
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -62,7 +62,7 @@ var File_api_proto_common_proto protoreflect.FileDescriptor
 const file_api_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"\x16api/proto/common.proto\x12\x12openmachinecore.v1\"\x0f\n" +
-	"\rStatusRequestB6Z4github.com/KevinKickass/OpenMachineCore/api/proto/v1b\x06proto3"
+	"\rStatusRequestB3Z1github.com/KevinKickass/OpenMachineCore/api/protob\x06proto3"
 
 var (
 	file_api_proto_common_proto_rawDescOnce sync.Once

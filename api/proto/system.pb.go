@@ -4,7 +4,7 @@
 // 	protoc        v3.19.6
 // source: api/proto/system.proto
 
-package v1
+package proto
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -258,7 +258,7 @@ const file_api_proto_system_proto_rawDesc = "" +
 	"\rSystemService\x12U\n" +
 	"\fStreamStatus\x12!.openmachinecore.v1.StatusRequest\x1a .openmachinecore.v1.SystemStatus0\x01\x12V\n" +
 	"\rTriggerUpdate\x12!.openmachinecore.v1.UpdateRequest\x1a\".openmachinecore.v1.UpdateResponse\x12P\n" +
-	"\tGetStatus\x12!.openmachinecore.v1.StatusRequest\x1a .openmachinecore.v1.SystemStatusB6Z4github.com/KevinKickass/OpenMachineCore/api/proto/v1b\x06proto3"
+	"\tGetStatus\x12!.openmachinecore.v1.StatusRequest\x1a .openmachinecore.v1.SystemStatusB3Z1github.com/KevinKickass/OpenMachineCore/api/protob\x06proto3"
 
 var (
 	file_api_proto_system_proto_rawDescOnce sync.Once

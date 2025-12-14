@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package openmachinecore.v1;
+
+option go_package = "github.com/KevinKickass/OpenMachineCore/api/proto";
+
+import "api/proto/common.proto";
+
+service WorkflowService {
+  rpc StreamExecutionStatus(ExecutionStreamRequest) returns (stream ExecutionStatus);
+  rpc GetExecutionStatus(ExecutionStatusRequest) returns (ExecutionStatusResponse);
+}
+
+message ExecutionStreamRequest {
+  string execution_id = 1;
+}
+
+message ExecutionStatusRequest {
+  string execution_id = 1;
+}
+
+message ExecutionStatus {
+  string execution_id = 1;
+  string event_type = 2;
+  string payload = 3;
+  int64 timestamp = 4;
+}
+
+message ExecutionStatusResponse {
+  string execution_id = 1;
+  string workflow_id = 2;
+  string status = 3;
+  int32 current_step = 4;
+  string error = 5;
+  repeated StepStatus steps = 6;
+  int64 started_at = 7;
+  int64 completed_at = 8;
+}
+
+message StepStatus {
+  int32 step_index = 1;
+  string step_name = 2;
+  string status = 3;
+  string output = 4;
+  string error = 5;
+}
