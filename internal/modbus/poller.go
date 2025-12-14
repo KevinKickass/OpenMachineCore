@@ -9,13 +9,13 @@ import (
 )
 
 type Poller struct {
-	device       *Device
-	interval     time.Duration
-	logger       *zap.Logger
-	stopChan     chan struct{}
-	wg           sync.WaitGroup
-	running      bool
-	mu           sync.Mutex
+	device   *Device
+	interval time.Duration
+	logger   *zap.Logger
+	stopChan chan struct{}
+	wg       sync.WaitGroup
+	running  bool
+	mu       sync.Mutex
 }
 
 func NewPoller(device *Device, interval time.Duration, logger *zap.Logger) *Poller {

@@ -33,10 +33,10 @@ func (s SystemState) String() string {
 }
 
 type UpdateProgress struct {
-	Phase     string  `json:"phase"`
-	Progress  int     `json:"progress"` // 0-100
-	Message   string  `json:"message"`
-	StartedAt int64   `json:"started_at"`
+	Phase     string `json:"phase"`
+	Progress  int    `json:"progress"` // 0-100
+	Message   string `json:"message"`
+	StartedAt int64  `json:"started_at"`
 }
 
 type SystemStatus struct {

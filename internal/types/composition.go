@@ -1,9 +1,9 @@
 package types
 
 type DeviceComposition struct {
-	InstanceID string              `json:"instance_id"`
-	Composition CompositionConfig  `json:"composition"`
-	IOMapping  map[string]string   `json:"io_mapping"`
+	InstanceID  string            `json:"instance_id"`
+	Composition CompositionConfig `json:"composition"`
+	IOMapping   map[string]string `json:"io_mapping"`
 }
 
 type CompositionConfig struct {
@@ -25,10 +25,10 @@ type TerminalConfig struct {
 }
 
 type ModuleDefinition struct {
-	Module        ModuleInfo       `json:"module"`
-	ProcessImage  ProcessImageInfo `json:"process_image"`
-	Channels      []ChannelInfo    `json:"channels"`
-	Registers     []RegisterDefinition `json:"registers,omitempty"`
+	Module       ModuleInfo           `json:"module"`
+	ProcessImage ProcessImageInfo     `json:"process_image"`
+	Channels     []ChannelInfo        `json:"channels"`
+	Registers    []RegisterDefinition `json:"registers,omitempty"`
 }
 
 type ModuleInfo struct {

@@ -14,7 +14,7 @@ import (
 
 type Manager struct {
 	loader   *ProfileLoader
-	composer *Composer  // ADD THIS
+	composer *Composer // ADD THIS
 	devices  map[uuid.UUID]*modbus.Device
 	pollers  map[uuid.UUID]*modbus.Poller
 	mu       sync.RWMutex
@@ -27,11 +27,11 @@ func NewManager(searchPaths []string, logger *zap.Logger) (*Manager, error) {
 		return nil, fmt.Errorf("failed to create profile loader: %w", err)
 	}
 
-	composer := NewComposer(searchPaths, logger)  // ADD THIS
+	composer := NewComposer(searchPaths, logger) // ADD THIS
 
 	return &Manager{
 		loader:   loader,
-		composer: composer,  // ADD THIS
+		composer: composer, // ADD THIS
 		devices:  make(map[uuid.UUID]*modbus.Device),
 		pollers:  make(map[uuid.UUID]*modbus.Poller),
 		logger:   logger,

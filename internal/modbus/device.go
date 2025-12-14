@@ -11,15 +11,15 @@ import (
 )
 
 type Device struct {
-	ID           uuid.UUID
-	Name         string
-	Profile      *types.DeviceProfileDefinition
-	Client       *Client
-	IOMapping    map[string]string // logicalName -> registerName
-	RegisterMap  map[string]*types.RegisterDefinition
-	mu           sync.RWMutex
-	lastValues   map[string]interface{}
-	connected    bool
+	ID          uuid.UUID
+	Name        string
+	Profile     *types.DeviceProfileDefinition
+	Client      *Client
+	IOMapping   map[string]string // logicalName -> registerName
+	RegisterMap map[string]*types.RegisterDefinition
+	mu          sync.RWMutex
+	lastValues  map[string]interface{}
+	connected   bool
 }
 
 func NewDevice(
@@ -129,7 +129,6 @@ func (d *Device) ReadRegister(ctx context.Context, registerName string) (interfa
 	return value, nil
 }
 
-
 // WriteRegister schreibt einen Register
 func (d *Device) WriteRegister(ctx context.Context, registerName string, value interface{}) error {
 	d.mu.RLock()
@@ -226,25 +225,25 @@ func (d *Device) convertRegisterValue(registers []uint16, dataType types.DataTyp
 	case types.DataTypeBool:
 		// For bool, check if any bit is set
 		return registers[0] != 0
-		
+
 	case types.DataTypeUint16:
 		return float64(registers[0]) * scaleFactor
-		
+
 	case types.DataTypeInt16:
 		return float64(int16(registers[0])) * scaleFactor
-		
+
 	case types.DataTypeUint32:
 		if len(registers) >= 2 {
 			val := uint32(registers[0])<<16 | uint32(registers[1])
 			return float64(val) * scaleFactor
 		}
-		
+
 	case types.DataTypeInt32:
 		if len(registers) >= 2 {
 			val := int32(registers[0])<<16 | int32(registers[1])
 			return float64(val) * scaleFactor
 		}
-		
+
 	case types.DataTypeFloat32:
 		if len(registers) >= 2 {
 			// IEEE 754 float32 from 2 registers

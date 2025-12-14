@@ -35,7 +35,7 @@ func (c *Composer) ComposeDevice(comp types.DeviceComposition) (*types.DevicePro
 	}
 
 	if couplerModule.Module.Type != "coupler" {
-		return nil, fmt.Errorf("module %s is not a coupler (type: %s)", 
+		return nil, fmt.Errorf("module %s is not a coupler (type: %s)",
 			couplerModule.Module.ID, couplerModule.Module.Type)
 	}
 

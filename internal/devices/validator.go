@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	_ "embed"
 	"github.com/KevinKickass/OpenMachineCore/internal/types"
 	"github.com/santhosh-tekuri/jsonschema/v5"
-	_ "embed"
 )
 
 //go:embed schema/device-profile-v1.json
@@ -19,8 +19,8 @@ type Validator struct {
 
 func NewValidator() (*Validator, error) {
 	compiler := jsonschema.NewCompiler()
-	
-	if err := compiler.AddResource("device-profile-v1.json", 
+
+	if err := compiler.AddResource("device-profile-v1.json",
 		strings.NewReader(deviceProfileSchemaJSON)); err != nil {
 		return nil, fmt.Errorf("failed to add schema resource: %w", err)
 	}
