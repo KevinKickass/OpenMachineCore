@@ -1,24 +1,40 @@
-# docker-compose.yml
 version: '3.8'
 
 services:
   postgres:
-    image: postgres:16-alpine
-    container_name: omc-postgres
+    image: postgres:15-alpine
     environment:
+      POSTGRES_USER: openmachine
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
       POSTGRES_DB: openmachinecore
-      POSTGRES_USER: omc
-      POSTGRES_PASSWORD: omc
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U omc"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U openmachine"]
+      interval: 10s
       timeout: 5s
       retries: 5
+
+  openmachinecore:
+    build: .
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: openmachine
+      DATABASE_PASSWORD: ${DB_PASSWORD:-changeme}
+      DATABASE_NAME: openmachinecore
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./configs:/app/configs
+      - ./device-descriptors:/app/device-descriptors
 
 volumes:
   postgres_data:
