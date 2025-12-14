@@ -89,6 +89,22 @@ func ReadHoldingRegistersRequest(transactionID uint16, unitID uint8, startAddr u
 	}
 }
 
+// ReadInputRegistersRequest creates request for Function Code 0x04
+func ReadInputRegistersRequest(transactionID uint16, unitID uint8, startAddr uint16, quantity uint16) *ModbusFrame {
+	data := make([]byte, 4)
+	binary.BigEndian.PutUint16(data[0:2], startAddr)
+	binary.BigEndian.PutUint16(data[2:4], quantity)
+	
+	return &ModbusFrame{
+		TransactionID: transactionID,
+		ProtocolID:    0x0000,
+		UnitID:        unitID,
+		FunctionCode:  FuncCodeReadInputRegisters,
+		Data:          data,
+	}
+}
+
+
 // WriteSingleRegisterRequest erstellt Request für Function Code 0x06
 func WriteSingleRegisterRequest(transactionID uint16, unitID uint8, addr uint16, value uint16) *ModbusFrame {
 	data := make([]byte, 4)

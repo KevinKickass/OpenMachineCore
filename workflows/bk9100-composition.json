@@ -1,0 +1,53 @@
+{
+  "workflow": {
+    "id": "my-machine-workflow",
+    "name": "My Machine Control",
+    "version": "1.0"
+  },
+  "devices": [
+    {
+      "instance_id": "station-01",
+      "composition": {
+        "coupler": {
+          "module": "beckhoff/modules/bk9100",
+          "ip_address": "192.168.1.100",
+          "port": 502,
+          "unit_id": 1
+        },
+        "terminals": [
+          {
+            "position": 0,
+            "module": "beckhoff/modules/kl1408",
+            "prefix": "inputs_station1"
+          },
+          {
+            "position": 1,
+            "module": "beckhoff/modules/kl2408",
+            "prefix": "outputs_station1"
+          }
+        ]
+      },
+      "io_mapping": {
+        "START_BUTTON": "inputs_station1.input_0",
+        "STOP_BUTTON": "inputs_station1.input_1",
+        "SENSOR_1": "inputs_station1.input_2",
+        "LED_GREEN": "outputs_station1.output_0",
+        "LED_RED": "outputs_station1.output_1",
+        "VALVE_1": "outputs_station1.output_2"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "name": "init",
+      "actions": [
+        {
+          "device": "station-01",
+          "register": "LED_GREEN",
+          "value": false
+        }
+      ],
+      "next": "wait_for_start"
+    }
+  ]
+}

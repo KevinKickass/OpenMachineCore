@@ -128,3 +128,15 @@ func (c *Client) WriteSingleRegister(ctx context.Context, unitID uint8, addr uin
 	_, err := c.SendFrame(ctx, request)
 	return err
 }
+
+// ReadInputRegisters reads input registers (function code 0x04)
+func (c *Client) ReadInputRegisters(ctx context.Context, unitID uint8, startAddr uint16, quantity uint16) ([]uint16, error) {
+	request := ReadInputRegistersRequest(0, unitID, startAddr, quantity)
+	
+	response, err := c.SendFrame(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	
+	return response.ParseRegisterResponse()
+}

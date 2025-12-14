@@ -80,6 +80,7 @@ func (d *Device) Disconnect() error {
 	return nil
 }
 
+// ReadRegister liest einen Register nach Name
 func (d *Device) ReadRegister(ctx context.Context, registerName string) (interface{}, error) {
 	d.mu.RLock()
 	reg, exists := d.RegisterMap[registerName]
@@ -89,19 +90,38 @@ func (d *Device) ReadRegister(ctx context.Context, registerName string) (interfa
 		return nil, fmt.Errorf("register not found: %s", registerName)
 	}
 
+	// Support for Coils and Discrete Inputs
+	if reg.Type == types.RegisterTypeCoil || reg.Type == types.RegisterTypeDiscreteInput {
+		// For single bit, read as coil/discrete input
+		// TODO: Implement ReadCoils/ReadDiscreteInputs
+		return nil, fmt.Errorf("coil/discrete input reading not yet implemented")
+	}
+
+	// For registers (holding/input)
 	if reg.Type != types.RegisterTypeHoldingRegister && reg.Type != types.RegisterTypeInputRegister {
 		return nil, fmt.Errorf("unsupported register type: %s", reg.Type)
 	}
 
 	quantity := d.getRegisterQuantity(reg.DataType)
 
-	values, err := d.Client.ReadHoldingRegisters(ctx, uint8(d.Profile.Connection.UnitID), reg.Address, quantity)
+	// Modbus Read based on register type
+	var values []uint16
+	var err error
+
+	if reg.Type == types.RegisterTypeHoldingRegister {
+		values, err = d.Client.ReadHoldingRegisters(ctx, uint8(d.Profile.Connection.UnitID), reg.Address, quantity)
+	} else {
+		values, err = d.Client.ReadInputRegisters(ctx, uint8(d.Profile.Connection.UnitID), reg.Address, quantity)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to read register %s: %w", registerName, err)
 	}
 
+	// Convert value based on data type
 	value := d.convertRegisterValue(values, reg.DataType, reg.ScaleFactor)
 
+	// Cache update
 	d.mu.Lock()
 	d.lastValues[registerName] = value
 	d.mu.Unlock()
@@ -109,6 +129,8 @@ func (d *Device) ReadRegister(ctx context.Context, registerName string) (interfa
 	return value, nil
 }
 
+
+// WriteRegister schreibt einen Register
 func (d *Device) WriteRegister(ctx context.Context, registerName string, value interface{}) error {
 	d.mu.RLock()
 	reg, exists := d.RegisterMap[registerName]
@@ -122,12 +144,16 @@ func (d *Device) WriteRegister(ctx context.Context, registerName string, value i
 		return fmt.Errorf("register %s is read-only", registerName)
 	}
 
-	if reg.DataType != types.DataTypeUint16 && reg.DataType != types.DataTypeInt16 {
-		return fmt.Errorf("only int16/uint16 write supported for now")
-	}
-
 	var regValue uint16
+
+	// Convert value to uint16 based on type
 	switch v := value.(type) {
+	case bool:
+		if v {
+			regValue = 1
+		} else {
+			regValue = 0
+		}
 	case int:
 		regValue = uint16(v)
 	case int16:
@@ -135,7 +161,16 @@ func (d *Device) WriteRegister(ctx context.Context, registerName string, value i
 	case uint16:
 		regValue = v
 	case float64:
-		regValue = uint16(v / reg.ScaleFactor)
+		// JSON unmarshals numbers as float64
+		if reg.DataType == types.DataTypeBool {
+			if v > 0 {
+				regValue = 1
+			} else {
+				regValue = 0
+			}
+		} else {
+			regValue = uint16(v / reg.ScaleFactor)
+		}
 	default:
 		return fmt.Errorf("unsupported value type: %T", value)
 	}
@@ -188,22 +223,35 @@ func (d *Device) convertRegisterValue(registers []uint16, dataType types.DataTyp
 	}
 
 	switch dataType {
+	case types.DataTypeBool:
+		// For bool, check if any bit is set
+		return registers[0] != 0
+		
 	case types.DataTypeUint16:
 		return float64(registers[0]) * scaleFactor
+		
 	case types.DataTypeInt16:
 		return float64(int16(registers[0])) * scaleFactor
+		
 	case types.DataTypeUint32:
 		if len(registers) >= 2 {
 			val := uint32(registers[0])<<16 | uint32(registers[1])
 			return float64(val) * scaleFactor
 		}
+		
 	case types.DataTypeInt32:
 		if len(registers) >= 2 {
 			val := int32(registers[0])<<16 | int32(registers[1])
 			return float64(val) * scaleFactor
 		}
-	case types.DataTypeBool:
-		return registers[0] != 0
+		
+	case types.DataTypeFloat32:
+		if len(registers) >= 2 {
+			// IEEE 754 float32 from 2 registers
+			bits := uint32(registers[0])<<16 | uint32(registers[1])
+			// TODO: Convert to float32
+			return float64(bits)
+		}
 	}
 
 	return registers[0]

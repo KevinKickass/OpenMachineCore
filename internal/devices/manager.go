@@ -7,16 +7,18 @@ import (
 	"time"
 
 	"github.com/KevinKickass/OpenMachineCore/internal/modbus"
+	"github.com/KevinKickass/OpenMachineCore/internal/types"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 type Manager struct {
-	loader      *ProfileLoader
-	devices     map[uuid.UUID]*modbus.Device
-	pollers     map[uuid.UUID]*modbus.Poller
-	mu          sync.RWMutex
-	logger      *zap.Logger
+	loader   *ProfileLoader
+	composer *Composer  // ADD THIS
+	devices  map[uuid.UUID]*modbus.Device
+	pollers  map[uuid.UUID]*modbus.Poller
+	mu       sync.RWMutex
+	logger   *zap.Logger
 }
 
 func NewManager(searchPaths []string, logger *zap.Logger) (*Manager, error) {
@@ -25,15 +27,18 @@ func NewManager(searchPaths []string, logger *zap.Logger) (*Manager, error) {
 		return nil, fmt.Errorf("failed to create profile loader: %w", err)
 	}
 
+	composer := NewComposer(searchPaths, logger)  // ADD THIS
+
 	return &Manager{
-		loader:  loader,
-		devices: make(map[uuid.UUID]*modbus.Device),
-		pollers: make(map[uuid.UUID]*modbus.Poller),
-		logger:  logger,
+		loader:   loader,
+		composer: composer,  // ADD THIS
+		devices:  make(map[uuid.UUID]*modbus.Device),
+		pollers:  make(map[uuid.UUID]*modbus.Poller),
+		logger:   logger,
 	}, nil
 }
 
-// LoadDevice lädt Device Profile und erstellt Device-Instanz
+// LoadDevice loads device from profile path (legacy method)
 func (m *Manager) LoadDevice(
 	name string,
 	profilePath string,
@@ -43,19 +48,19 @@ func (m *Manager) LoadDevice(
 	ioMapping map[string]string,
 	timeout time.Duration,
 ) (*modbus.Device, error) {
-	// Profile laden (lazy)
+	// Load profile (lazy)
 	profile, err := m.loader.Load(profilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load profile %s: %w", profilePath, err)
 	}
 
-	// Device erstellen
+	// Create device
 	device, err := modbus.NewDevice(name, ipAddress, port, unitID, profile, ioMapping, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create device: %w", err)
 	}
 
-	// Verbinden
+	// Connect
 	if err := device.Connect(); err != nil {
 		return nil, fmt.Errorf("failed to connect device: %w", err)
 	}
@@ -72,7 +77,49 @@ func (m *Manager) LoadDevice(
 	return device, nil
 }
 
-// StartPoller startet Poller für ein Device
+// LoadDeviceFromComposition creates device from composition
+func (m *Manager) LoadDeviceFromComposition(
+	comp types.DeviceComposition,
+	timeout time.Duration,
+) (*modbus.Device, error) {
+	// Compose device profile from modules
+	profile, err := m.composer.ComposeDevice(comp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compose device: %w", err)
+	}
+
+	// Create device instance
+	device, err := modbus.NewDevice(
+		comp.InstanceID,
+		comp.Composition.Coupler.IPAddress,
+		comp.Composition.Coupler.Port,
+		uint8(comp.Composition.Coupler.UnitID),
+		profile,
+		comp.IOMapping,
+		timeout,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create device: %w", err)
+	}
+
+	// Connect
+	if err := device.Connect(); err != nil {
+		return nil, fmt.Errorf("failed to connect device: %w", err)
+	}
+
+	m.mu.Lock()
+	m.devices[device.ID] = device
+	m.mu.Unlock()
+
+	m.logger.Info("Device loaded from composition",
+		zap.String("instance_id", comp.InstanceID),
+		zap.String("coupler", comp.Composition.Coupler.Module),
+		zap.Int("terminals", len(comp.Composition.Terminals)))
+
+	return device, nil
+}
+
+// StartPoller starts poller for a device
 func (m *Manager) StartPoller(deviceID uuid.UUID, interval time.Duration) error {
 	m.mu.RLock()
 	device, exists := m.devices[deviceID]
@@ -94,7 +141,7 @@ func (m *Manager) StartPoller(deviceID uuid.UUID, interval time.Duration) error 
 	return nil
 }
 
-// GetDevice gibt Device zurück
+// GetDevice returns device by ID
 func (m *Manager) GetDevice(deviceID uuid.UUID) (*modbus.Device, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -103,7 +150,7 @@ func (m *Manager) GetDevice(deviceID uuid.UUID) (*modbus.Device, bool) {
 	return device, exists
 }
 
-// GetDeviceByName gibt Device nach Name zurück
+// GetDeviceByName returns device by name
 func (m *Manager) GetDeviceByName(name string) (*modbus.Device, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -117,17 +164,17 @@ func (m *Manager) GetDeviceByName(name string) (*modbus.Device, bool) {
 	return nil, false
 }
 
-// StopAll stoppt alle Poller und trennt alle Devices
+// StopAll stops all pollers and disconnects all devices
 func (m *Manager) StopAll(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Alle Poller stoppen
+	// Stop all pollers
 	for _, poller := range m.pollers {
 		poller.Stop()
 	}
 
-	// Alle Devices trennen
+	// Disconnect all devices
 	for _, device := range m.devices {
 		if err := device.Disconnect(); err != nil {
 			m.logger.Error("Failed to disconnect device",
@@ -139,7 +186,7 @@ func (m *Manager) StopAll(ctx context.Context) error {
 	return nil
 }
 
-// ListDevices gibt alle Devices zurück
+// ListDevices returns all devices
 func (m *Manager) ListDevices() []*modbus.Device {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

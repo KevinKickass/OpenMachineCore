@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/http"
 	"sync"
 	"time"
 
+	"github.com/KevinKickass/OpenMachineCore/internal/api/rest"
 	"github.com/KevinKickass/OpenMachineCore/internal/config"
 	"github.com/KevinKickass/OpenMachineCore/internal/devices"
 	"github.com/KevinKickass/OpenMachineCore/internal/storage"
@@ -22,7 +22,7 @@ type LifecycleManager struct {
 	logger         *zap.Logger
 
 	// Servers
-	httpServer *http.Server
+	restServer *rest.Server
 	grpcServer *grpc.Server
 
 	// State
@@ -60,7 +60,7 @@ func NewLifecycleManager(
 	}
 }
 
-// Start startet das gesamte System
+// Start starts the entire system
 func (lm *LifecycleManager) Start() error {
 	lm.logger.Info("Starting OpenMachineCore")
 
@@ -68,15 +68,21 @@ func (lm *LifecycleManager) Start() error {
 	lm.setState(StateInitializing)
 	lm.broadcastStatus()
 
-	// gRPC Server starten
+	// Load devices from database
+	if err := lm.loadDevicesFromDB(); err != nil {
+		lm.logger.Warn("Failed to load devices from database", zap.Error(err))
+		// Continue anyway, not critical
+	}
+
+	// Start gRPC Server
 	if err := lm.startGRPCServer(); err != nil {
 		lm.setError(fmt.Errorf("failed to start gRPC: %w", err))
 		return err
 	}
 
-	// HTTP Server starten
-	if err := lm.startHTTPServer(); err != nil {
-		lm.setError(fmt.Errorf("failed to start HTTP: %w", err))
+	// Start REST API Server
+	if err := lm.startRESTServer(); err != nil {
+		lm.setError(fmt.Errorf("failed to start REST API: %w", err))
 		return err
 	}
 
@@ -91,7 +97,44 @@ func (lm *LifecycleManager) Start() error {
 	return nil
 }
 
-// Shutdown fährt das System herunter
+func (lm *LifecycleManager) loadDevicesFromDB() error {
+	ctx := context.Background()
+	
+	compositions, err := lm.storage.LoadAllDeviceCompositions(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load compositions: %w", err)
+	}
+
+	lm.logger.Info("Loading devices from database", zap.Int("count", len(compositions)))
+
+	timeout := time.Duration(lm.config.Modbus.DefaultTimeout)
+
+	for _, comp := range compositions {
+		device, err := lm.deviceManager.LoadDeviceFromComposition(comp, timeout)
+		if err != nil {
+			lm.logger.Error("Failed to load device",
+				zap.String("instance_id", comp.InstanceID),
+				zap.Error(err))
+			continue
+		}
+
+		// Start poller for this device
+		pollInterval := time.Duration(lm.config.Modbus.DefaultPollInterval)
+		if err := lm.deviceManager.StartPoller(device.ID, pollInterval); err != nil {
+			lm.logger.Error("Failed to start poller",
+				zap.String("instance_id", comp.InstanceID),
+				zap.Error(err))
+		}
+
+		lm.logger.Info("Device loaded and poller started",
+			zap.String("instance_id", comp.InstanceID))
+	}
+
+	return nil
+}
+
+
+// Shutdown gracefully shuts down the system
 func (lm *LifecycleManager) Shutdown(ctx context.Context) error {
 	var shutdownErr error
 
@@ -114,9 +157,9 @@ func (lm *LifecycleManager) Shutdown(ctx context.Context) error {
 
 func (lm *LifecycleManager) gracefulShutdown(ctx context.Context) error {
 	var wg sync.WaitGroup
-	errChan := make(chan error, 3)
+	errChan := make(chan error, 4)
 
-	// 1. Stoppe Device Manager (alle Poller & Connections)
+	// 1. Stop Device Manager (all pollers & connections)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -125,16 +168,16 @@ func (lm *LifecycleManager) gracefulShutdown(ctx context.Context) error {
 		}
 	}()
 
-	// 2. HTTP Server graceful shutdown
-	if lm.httpServer != nil {
+	// 2. REST API Server graceful shutdown
+	if lm.restServer != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 
-			if err := lm.httpServer.Shutdown(shutdownCtx); err != nil {
-				errChan <- fmt.Errorf("http shutdown failed: %w", err)
+			if err := lm.restServer.Shutdown(shutdownCtx); err != nil {
+				errChan <- fmt.Errorf("rest api shutdown failed: %w", err)
 			}
 		}()
 	}
@@ -148,7 +191,7 @@ func (lm *LifecycleManager) gracefulShutdown(ctx context.Context) error {
 		}()
 	}
 
-	// Warte auf alle Shutdowns
+	// Wait for all shutdowns
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -175,7 +218,7 @@ func (lm *LifecycleManager) startGRPCServer() error {
 
 	lm.grpcServer = grpc.NewServer()
 
-	// gRPC Services werden hier registriert (später)
+	// gRPC Services will be registered here (later)
 	// pb.RegisterSystemServiceServer(lm.grpcServer, &grpcService{lm: lm})
 	// pb.RegisterMachineServiceServer(lm.grpcServer, &machineService{lm: lm})
 
@@ -189,27 +232,12 @@ func (lm *LifecycleManager) startGRPCServer() error {
 	return nil
 }
 
-func (lm *LifecycleManager) startHTTPServer() error {
-	// HTTP Router wird hier erstellt (später mit Gin)
-	// router := gin.Default()
-	// lm.setupRESTRoutes(router)
-
-	lm.httpServer = &http.Server{
-		Addr:    fmt.Sprintf(":%d", lm.config.Server.HTTPPort),
-		Handler: nil, // TODO: Gin Router
-	}
-
-	go func() {
-		lm.logger.Info("HTTP server listening", zap.Int("port", lm.config.Server.HTTPPort))
-		if err := lm.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			lm.logger.Error("HTTP server failed", zap.Error(err))
-		}
-	}()
-
-	return nil
+func (lm *LifecycleManager) startRESTServer() error {
+	lm.restServer = rest.NewServer(lm.config, lm, lm.logger)
+	return lm.restServer.Start()
 }
 
-// TriggerUpdate initiiert System-Update
+// TriggerUpdate initiates system update
 func (lm *LifecycleManager) TriggerUpdate(workflowPath string) error {
 	lm.stateMu.Lock()
 	if lm.currentState != StateRunning {
@@ -238,13 +266,13 @@ func (lm *LifecycleManager) executeUpdate(workflowPath string) {
 
 	// Phase 2: Loading workflow (50%)
 	lm.setUpdateProgress("Loading workflow", 50, fmt.Sprintf("Loading workflow from %s", workflowPath))
-	// TODO: Workflow laden
+	// TODO: Load workflow from DB/file
 
-	time.Sleep(2 * time.Second) // Simuliere Arbeit
+	time.Sleep(2 * time.Second) // Simulate work
 
 	// Phase 3: Initializing devices (70%)
 	lm.setUpdateProgress("Initializing devices", 70, "Connecting to devices")
-	// TODO: Devices initialisieren
+	// TODO: Initialize devices from workflow
 
 	time.Sleep(2 * time.Second)
 
@@ -295,8 +323,25 @@ func (lm *LifecycleManager) setUpdateProgress(phase string, progress int, messag
 	lm.broadcastStatus()
 }
 
-// GetCurrentStatus gibt aktuellen Status zurück
-func (lm *LifecycleManager) GetCurrentStatus() SystemStatus {
+// GetCurrentStatus returns current system status (for REST API)
+func (lm *LifecycleManager) GetCurrentStatus() interface{} {
+	lm.stateMu.RLock()
+	defer lm.stateMu.RUnlock()
+
+	return map[string]interface{}{
+		"state": lm.currentState.String(),
+		"update_progress": map[string]interface{}{
+			"phase":      lm.updateProgress.Phase,
+			"progress":   lm.updateProgress.Progress,
+			"message":    lm.updateProgress.Message,
+			"started_at": lm.updateProgress.StartedAt,
+		},
+		"timestamp": time.Now().Unix(),
+	}
+}
+
+// getStatusInternal returns typed status (for internal use)
+func (lm *LifecycleManager) getStatusInternal() SystemStatus {
 	lm.stateMu.RLock()
 	defer lm.stateMu.RUnlock()
 
@@ -307,7 +352,23 @@ func (lm *LifecycleManager) GetCurrentStatus() SystemStatus {
 	}
 }
 
-// SubscribeStatus abonniert Status-Updates
+func (lm *LifecycleManager) broadcastStatus() {
+	status := lm.getStatusInternal()  // Use internal method
+
+	lm.listenersMu.RLock()
+	defer lm.listenersMu.RUnlock()
+
+	for _, listener := range lm.statusListeners {
+		select {
+		case listener <- status:
+		default:
+			// Channel full, skip
+		}
+	}
+}
+
+
+// SubscribeStatus subscribes to status updates
 func (lm *LifecycleManager) SubscribeStatus() chan SystemStatus {
 	ch := make(chan SystemStatus, 10)
 
@@ -318,7 +379,7 @@ func (lm *LifecycleManager) SubscribeStatus() chan SystemStatus {
 	return ch
 }
 
-// UnsubscribeStatus beendet Abo
+// UnsubscribeStatus unsubscribes from status updates
 func (lm *LifecycleManager) UnsubscribeStatus(ch chan SystemStatus) {
 	lm.listenersMu.Lock()
 	defer lm.listenersMu.Unlock()
@@ -332,22 +393,17 @@ func (lm *LifecycleManager) UnsubscribeStatus(ch chan SystemStatus) {
 	}
 }
 
-func (lm *LifecycleManager) broadcastStatus() {
-	status := lm.GetCurrentStatus()
-
-	lm.listenersMu.RLock()
-	defer lm.listenersMu.RUnlock()
-
-	for _, listener := range lm.statusListeners {
-		select {
-		case listener <- status:
-		default:
-			// Channel voll, Skip
-		}
-	}
-}
-
-// DeviceManager gibt Device Manager zurück
+// DeviceManager returns the device manager
 func (lm *LifecycleManager) DeviceManager() *devices.Manager {
 	return lm.deviceManager
+}
+
+// Storage returns the storage client
+func (lm *LifecycleManager) Storage() *storage.PostgresClient {
+	return lm.storage
+}
+
+// Config returns the configuration
+func (lm *LifecycleManager) Config() *config.Config {
+	return lm.config
 }
