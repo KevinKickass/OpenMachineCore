@@ -4,7 +4,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/KevinKickass/OpenMachineCore?sort=semver&style=for-the-badge)](https://github.com/KevinKickass/OpenMachineCore/releases/latest)
 [![License](https://img.shields.io/github/license/KevinKickass/OpenMachineCore?style=for-the-badge)](https://github.com/KevinKickass/OpenMachineCore/blob/main/LICENSE)
 [![Docker](https://img.shields.io/badge/docker-Dockerfile-2496ED?logo=docker&logoColor=white&style=for-the-badge)](https://github.com/KevinKickass/OpenMachineCore/blob/main/Dockerfile)
-[![Buy Me a Coffee](https://img.shields.io/badge/buy_me_a_coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black&style=for-the-badge)](https://www.buymeacoffee.com/DEINNAME)
+[![Buy Me a Coffee](https://img.shields.io/badge/buy_me_a_coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black&style=for-the-badge)](https://www.buymeacoffee.com/KevinKickass)
 
 
 
