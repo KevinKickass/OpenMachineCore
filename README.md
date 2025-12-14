@@ -2,6 +2,8 @@
 
 OpenMachineCore is a Go-based automation platform for industrial machine control. It combines a Modbus TCP device layer, a workflow engine, and a machine state controller with REST and gRPC APIs.
 
+## Still work in progress - Not production ready
+
 ## Features
 
 - Workflow engine with:
@@ -407,9 +409,10 @@ go test ./...
 
 ## License
 
-MIT see LICENSE
+Apache License 2.0 - See LICENSE for more information
 
 ---
 
-This README intentionally focuses on the minimal but practical information you need right now: how to build, configure, and use devices, workflows, and the machine controller. See API_Documentation.md for further information.```
+This README intentionally focuses on the minimal but practical information you need right now: how to build, configure, and use devices, workflows, and the machine controller. See API_Documentation.md for further information.
 
+---
