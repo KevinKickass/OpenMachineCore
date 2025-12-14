@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/KevinKickass/OpenMachineCore/internal/api/websocket"
 	"github.com/KevinKickass/OpenMachineCore/internal/config"
 	"github.com/KevinKickass/OpenMachineCore/internal/interfaces"
-	"github.com/KevinKickass/OpenMachineCore/internal/api/websocket"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -28,7 +28,7 @@ func NewServer(cfg *config.Config, lm interfaces.LifecycleManager, logger *zap.L
 		router: gin.Default(),
 		lm:     lm,
 		logger: logger,
-		wsHub: wsHub,
+		wsHub:  wsHub,
 	}
 
 	s.setupRoutes()
@@ -62,84 +62,84 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 func (s *Server) setupRoutes() {
-    // Health check
-    s.router.GET("/health", s.healthCheck)
+	// Health check
+	s.router.GET("/health", s.healthCheck)
 
-    // API v1
-    v1 := s.router.Group("/api/v1")
-    {
-        // System endpoints
-        system := v1.Group("/system")
-        {
-            system.GET("/status", s.getSystemStatus)
-            system.POST("/update", s.triggerUpdate)
-            system.POST("/shutdown", s.shutdown)
-        }
+	// API v1
+	v1 := s.router.Group("/api/v1")
+	{
+		// System endpoints
+		system := v1.Group("/system")
+		{
+			system.GET("/status", s.getSystemStatus)
+			system.POST("/update", s.triggerUpdate)
+			system.POST("/shutdown", s.shutdown)
+		}
 
-        // Device endpoints
-        devices := v1.Group("/devices")
-        {
-            devices.GET("", s.listDevices)
-            devices.GET("/:id", s.getDevice)
-            devices.POST("", s.createDevice)
-            devices.DELETE("/:id", s.deleteDevice)
-            devices.POST("/:id/read", s.readRegister)
-            devices.POST("/:id/write", s.writeRegister)
-        }
+		// Device endpoints
+		devices := v1.Group("/devices")
+		{
+			devices.GET("", s.listDevices)
+			devices.GET("/:id", s.getDevice)
+			devices.POST("", s.createDevice)
+			devices.DELETE("/:id", s.deleteDevice)
+			devices.POST("/:id/read", s.readRegister)
+			devices.POST("/:id/write", s.writeRegister)
+		}
 
-        // Workflow endpoints
-        workflows := v1.Group("/workflows")
-        {
-            workflows.GET("", s.listWorkflows)
-            workflows.GET("/:id", s.getWorkflow)
-            workflows.POST("", s.createWorkflow)
-            workflows.PUT("/:id", s.updateWorkflow)
-            workflows.DELETE("/:id", s.deleteWorkflow)
-            workflows.POST("/:id/activate", s.activateWorkflow)
-            workflows.POST("/:id/execute", s.executeWorkflow)
-        }
+		// Workflow endpoints
+		workflows := v1.Group("/workflows")
+		{
+			workflows.GET("", s.listWorkflows)
+			workflows.GET("/:id", s.getWorkflow)
+			workflows.POST("", s.createWorkflow)
+			workflows.PUT("/:id", s.updateWorkflow)
+			workflows.DELETE("/:id", s.deleteWorkflow)
+			workflows.POST("/:id/activate", s.activateWorkflow)
+			workflows.POST("/:id/execute", s.executeWorkflow)
+		}
 
-        // Workflow execution endpoints
-        executions := v1.Group("/executions")
-        {
-            executions.GET("/:id", s.getExecutionStatus)
-            executions.GET("/:id/steps", s.getExecutionSteps)
-        }
+		// Workflow execution endpoints
+		executions := v1.Group("/executions")
+		{
+			executions.GET("/:id", s.getExecutionStatus)
+			executions.GET("/:id/steps", s.getExecutionSteps)
+		}
 
-        // Module endpoints (device descriptors)
-        modules := v1.Group("/modules")
-        {
-            modules.GET("", s.listModules)
-            modules.GET("/:vendor", s.getVendorModules)
-            modules.GET("/:vendor/:model", s.getModule)
-        }
+		// Module endpoints (device descriptors)
+		modules := v1.Group("/modules")
+		{
+			modules.GET("", s.listModules)
+			modules.GET("/:vendor", s.getVendorModules)
+			modules.GET("/:vendor/:model", s.getModule)
+		}
 
-        // Machine control endpoints
-        machine := v1.Group("/machine")
-        {
-            machine.GET("/status", s.getMachineStatus)
-            machine.POST("/command", s.executeMachineCommand)
-            machine.POST("/configure", s.configureMachineWorkflows)
-        }
+		// Machine control endpoints
+		machine := v1.Group("/machine")
+		{
+			machine.GET("/status", s.getMachineStatus)
+			machine.POST("/command", s.executeMachineCommand)
+			machine.POST("/configure", s.configureMachineWorkflows)
+		}
 
-        // WebSocket endpoints
-        ws := v1.Group("/ws")
-        {
-            ws.GET("/live", s.wsLiveConnection)
-            ws.GET("/status", s.wsStatus)
-        }
-    }
+		// WebSocket endpoints
+		ws := v1.Group("/ws")
+		{
+			ws.GET("/live", s.wsLiveConnection)
+			ws.GET("/status", s.wsStatus)
+		}
+	}
 }
 
 // Handler methods für WebSocket
 func (s *Server) wsLiveConnection(c *gin.Context) {
-    websocket.ServeWs(s.wsHub, c.Writer, c.Request)
+	websocket.ServeWs(s.wsHub, c.Writer, c.Request)
 }
 
 func (s *Server) wsStatus(c *gin.Context) {
-    c.JSON(http.StatusOK, gin.H{
-        "connected_clients": s.wsHub.GetClientCount(),
-    })
+	c.JSON(http.StatusOK, gin.H{
+		"connected_clients": s.wsHub.GetClientCount(),
+	})
 }
 
 // Health check

@@ -9,6 +9,7 @@ import (
 
 	pb "github.com/KevinKickass/OpenMachineCore/api/proto"
 	"github.com/KevinKickass/OpenMachineCore/internal/api/rest"
+	ws "github.com/KevinKickass/OpenMachineCore/internal/api/websocket"
 	"github.com/KevinKickass/OpenMachineCore/internal/config"
 	"github.com/KevinKickass/OpenMachineCore/internal/devices"
 	"github.com/KevinKickass/OpenMachineCore/internal/interfaces"
@@ -17,7 +18,6 @@ import (
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/engine"
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/executor"
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/streaming"
-	ws "github.com/KevinKickass/OpenMachineCore/internal/api/websocket"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -34,7 +34,7 @@ type LifecycleManager struct {
 	workflowService   *streaming.WorkflowService
 	machineController *machine.Controller
 	logger            *zap.Logger
-	wsHub 			  *ws.Hub
+	wsHub             *ws.Hub
 
 	restServer *rest.Server
 	grpcServer *grpc.Server
@@ -79,7 +79,7 @@ func NewLifecycleManager(
 		workflowService:   workflowService,
 		machineController: machineController,
 		logger:            logger,
-		wsHub: 			   wsHub,
+		wsHub:             wsHub,
 		currentState:      StateInitializing,
 		shutdownChan:      make(chan struct{}),
 		statusListeners:   make([]chan SystemStatus, 0),

@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/KevinKickass/OpenMachineCore/internal/api/websocket"
 	"github.com/KevinKickass/OpenMachineCore/internal/storage"
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/definition"
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/executor"
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/streaming"
-	"github.com/KevinKickass/OpenMachineCore/internal/api/websocket"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -21,7 +21,7 @@ type Engine struct {
 	executor *executor.StepExecutor
 	streamer *streaming.EventStreamer
 	logger   *zap.Logger
-	wsHub            *websocket.Hub
+	wsHub    *websocket.Hub
 
 	runningMu       sync.RWMutex
 	runningContexts map[uuid.UUID]context.CancelFunc
@@ -39,66 +39,65 @@ func NewEngine(storage *storage.PostgresClient, executor *executor.StepExecutor,
 }
 
 func (e *Engine) ExecuteWorkflow(ctx context.Context, workflowID uuid.UUID, input map[string]any) (uuid.UUID, error) {
-    // Load workflow definition
-    workflow, _, err := e.storage.LoadWorkflow(ctx, workflowID)
-    if err != nil {
-        return uuid.Nil, fmt.Errorf("failed to load workflow: %w", err)
-    }
+	// Load workflow definition
+	workflow, _, err := e.storage.LoadWorkflow(ctx, workflowID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to load workflow: %w", err)
+	}
 
-    // Parse workflow definition JSON
-    workflowDef, err := definition.ParseWorkflow(workflow.Definition)
-    if err != nil {
-        return uuid.Nil, fmt.Errorf("failed to parse workflow definition: %w", err)
-    }
+	// Parse workflow definition JSON
+	workflowDef, err := definition.ParseWorkflow(workflow.Definition)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to parse workflow definition: %w", err)
+	}
 
-    // Create execution record
-    executionID := uuid.New()
-    inputJSON, _ := json.Marshal(input)
+	// Create execution record
+	executionID := uuid.New()
+	inputJSON, _ := json.Marshal(input)
 
-    exec := &storage.WorkflowExecution{
-        ID:         executionID,
-        WorkflowID: workflowID,
-        Status:     storage.StatusPending,
-        Input:      inputJSON,
-        StartedAt:  time.Now(),
-    }
+	exec := &storage.WorkflowExecution{
+		ID:         executionID,
+		WorkflowID: workflowID,
+		Status:     storage.StatusPending,
+		Input:      inputJSON,
+		StartedAt:  time.Now(),
+	}
 
-    if err := e.storage.CreateExecution(ctx, exec); err != nil {
-        return uuid.Nil, fmt.Errorf("failed to create execution: %w", err)
-    }
+	if err := e.storage.CreateExecution(ctx, exec); err != nil {
+		return uuid.Nil, fmt.Errorf("failed to create execution: %w", err)
+	}
 
-    // Broadcast workflow started event
-    if e.wsHub != nil {
-        e.wsHub.Broadcast(websocket.NewWorkflowMessage(
-            websocket.MessageTypeWorkflowStarted,
-            executionID.String(),
-            workflowID.String(),
-            "",
-            string(storage.StatusPending),
-            "",
-        ))
-    }
+	// Broadcast workflow started event
+	if e.wsHub != nil {
+		e.wsHub.Broadcast(websocket.NewWorkflowMessage(
+			websocket.MessageTypeWorkflowStarted,
+			executionID.String(),
+			workflowID.String(),
+			"",
+			string(storage.StatusPending),
+			"",
+		))
+	}
 
-    // Create cancellable context for this execution
-    execCtx, cancel := context.WithCancel(context.Background())
+	// Create cancellable context for this execution
+	execCtx, cancel := context.WithCancel(context.Background())
 
-    e.runningMu.Lock()
-    e.runningContexts[executionID] = cancel
-    e.runningMu.Unlock()
+	e.runningMu.Lock()
+	e.runningContexts[executionID] = cancel
+	e.runningMu.Unlock()
 
-    // Execute asynchronously
-    go func() {
-        defer func() {
-            e.runningMu.Lock()
-            delete(e.runningContexts, executionID)
-            e.runningMu.Unlock()
-        }()
-        e.runExecution(execCtx, exec, workflowDef, input)
-    }()
+	// Execute asynchronously
+	go func() {
+		defer func() {
+			e.runningMu.Lock()
+			delete(e.runningContexts, executionID)
+			e.runningMu.Unlock()
+		}()
+		e.runExecution(execCtx, exec, workflowDef, input)
+	}()
 
-    return executionID, nil
+	return executionID, nil
 }
-
 
 // CancelExecution stops a running workflow execution
 func (e *Engine) CancelExecution(ctx context.Context, executionID uuid.UUID) error {
@@ -123,113 +122,111 @@ func (e *Engine) cancelExecution(ctx context.Context, exec *storage.WorkflowExec
 }
 
 func (e *Engine) runExecution(ctx context.Context, exec *storage.WorkflowExecution, workflowDef *definition.Workflow, input map[string]any) {
-    // Update status to running
-    exec.Status = storage.StatusRunning
-    e.storage.UpdateExecution(ctx, exec)
+	// Update status to running
+	exec.Status = storage.StatusRunning
+	e.storage.UpdateExecution(ctx, exec)
 
-    // Broadcast running status
-    if e.wsHub != nil {
-        e.wsHub.Broadcast(websocket.NewWorkflowMessage(
-            websocket.MessageTypeWorkflowStep,
-            exec.ID.String(),
-            exec.WorkflowID.String(),
-            "",
-            string(storage.StatusRunning),
-            "Workflow execution started",
-        ))
-    }
+	// Broadcast running status
+	if e.wsHub != nil {
+		e.wsHub.Broadcast(websocket.NewWorkflowMessage(
+			websocket.MessageTypeWorkflowStep,
+			exec.ID.String(),
+			exec.WorkflowID.String(),
+			"",
+			string(storage.StatusRunning),
+			"Workflow execution started",
+		))
+	}
 
-    // Execute steps
-    for i, step := range workflowDef.Steps {
-        select {
-        case <-ctx.Done():
-            // Execution cancelled
-            exec.Status = storage.StatusCancelled
-            now := time.Now()
-            exec.CompletedAt = &now
-            e.storage.UpdateExecution(ctx, exec)
-            
-            if e.wsHub != nil {
-                e.wsHub.Broadcast(websocket.NewWorkflowMessage(
-                    websocket.MessageTypeWorkflowCancelled,
-                    exec.ID.String(),
-                    exec.WorkflowID.String(),
-                    step.Name,
-                    string(storage.StatusCancelled),
-                    "Workflow execution cancelled",
-                ))
-            }
-            return
+	// Execute steps
+	for i, step := range workflowDef.Steps {
+		select {
+		case <-ctx.Done():
+			// Execution cancelled
+			exec.Status = storage.StatusCancelled
+			now := time.Now()
+			exec.CompletedAt = &now
+			e.storage.UpdateExecution(ctx, exec)
 
-        default:
-            // Broadcast step start
-            if e.wsHub != nil {
-                e.wsHub.Broadcast(websocket.NewWorkflowMessage(
-                    websocket.MessageTypeWorkflowStep,
-                    exec.ID.String(),
-                    exec.WorkflowID.String(),
-                    step.Name,
-                    "running",
-                    fmt.Sprintf("Executing step: %s", step.Name),
-                ))
-            }
+			if e.wsHub != nil {
+				e.wsHub.Broadcast(websocket.NewWorkflowMessage(
+					websocket.MessageTypeWorkflowCancelled,
+					exec.ID.String(),
+					exec.WorkflowID.String(),
+					step.Name,
+					string(storage.StatusCancelled),
+					"Workflow execution cancelled",
+				))
+			}
+			return
 
-            // Execute step with correct parameters
-            _, err := e.executeStep(ctx, exec.ID, i, &step, input)
-            
-            if err != nil {
-                // Step failed
-                exec.Status = storage.StatusFailed
-                now := time.Now()
-                exec.CompletedAt = &now
-                e.storage.UpdateExecution(ctx, exec)
-                
-                if e.wsHub != nil {
-                    e.wsHub.Broadcast(websocket.NewWorkflowMessage(
-                        websocket.MessageTypeWorkflowFailed,
-                        exec.ID.String(),
-                        exec.WorkflowID.String(),
-                        step.Name,
-                        string(storage.StatusFailed),
-                        fmt.Sprintf("Step failed: %v", err),
-                    ))
-                }
-                return
-            }
+		default:
+			// Broadcast step start
+			if e.wsHub != nil {
+				e.wsHub.Broadcast(websocket.NewWorkflowMessage(
+					websocket.MessageTypeWorkflowStep,
+					exec.ID.String(),
+					exec.WorkflowID.String(),
+					step.Name,
+					"running",
+					fmt.Sprintf("Executing step: %s", step.Name),
+				))
+			}
 
-            // Broadcast step completed
-            if e.wsHub != nil {
-                e.wsHub.Broadcast(websocket.NewWorkflowMessage(
-                    websocket.MessageTypeWorkflowStep,
-                    exec.ID.String(),
-                    exec.WorkflowID.String(),
-                    step.Name,
-                    "completed",
-                    fmt.Sprintf("Step completed: %s", step.Name),
-                ))
-            }
-        }
-    }
+			// Execute step with correct parameters
+			_, err := e.executeStep(ctx, exec.ID, i, &step, input)
 
-    // All steps completed successfully
-    exec.Status = storage.StatusSuccess  // <- Geändert von StatusCompleted
-    now := time.Now()
-    exec.CompletedAt = &now
-    e.storage.UpdateExecution(ctx, exec)
+			if err != nil {
+				// Step failed
+				exec.Status = storage.StatusFailed
+				now := time.Now()
+				exec.CompletedAt = &now
+				e.storage.UpdateExecution(ctx, exec)
 
-    if e.wsHub != nil {
-        e.wsHub.Broadcast(websocket.NewWorkflowMessage(
-            websocket.MessageTypeWorkflowCompleted,
-            exec.ID.String(),
-            exec.WorkflowID.String(),
-            "",
-            string(storage.StatusSuccess),  // <- Geändert
-            "Workflow execution completed successfully",
-        ))
-    }
+				if e.wsHub != nil {
+					e.wsHub.Broadcast(websocket.NewWorkflowMessage(
+						websocket.MessageTypeWorkflowFailed,
+						exec.ID.String(),
+						exec.WorkflowID.String(),
+						step.Name,
+						string(storage.StatusFailed),
+						fmt.Sprintf("Step failed: %v", err),
+					))
+				}
+				return
+			}
+
+			// Broadcast step completed
+			if e.wsHub != nil {
+				e.wsHub.Broadcast(websocket.NewWorkflowMessage(
+					websocket.MessageTypeWorkflowStep,
+					exec.ID.String(),
+					exec.WorkflowID.String(),
+					step.Name,
+					"completed",
+					fmt.Sprintf("Step completed: %s", step.Name),
+				))
+			}
+		}
+	}
+
+	// All steps completed successfully
+	exec.Status = storage.StatusSuccess // <- Geändert von StatusCompleted
+	now := time.Now()
+	exec.CompletedAt = &now
+	e.storage.UpdateExecution(ctx, exec)
+
+	if e.wsHub != nil {
+		e.wsHub.Broadcast(websocket.NewWorkflowMessage(
+			websocket.MessageTypeWorkflowCompleted,
+			exec.ID.String(),
+			exec.WorkflowID.String(),
+			"",
+			string(storage.StatusSuccess), // <- Geändert
+			"Workflow execution completed successfully",
+		))
+	}
 }
-
-
 
 func (e *Engine) executeStep(ctx context.Context, executionID uuid.UUID, index int, step *definition.Step, input map[string]any) (map[string]any, error) {
 	stepID := uuid.New()

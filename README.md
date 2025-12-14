@@ -4,8 +4,10 @@
 [![Latest Release](https://img.shields.io/github/v/release/KevinKickass/OpenMachineCore?sort=semver)](https://github.com/KevinKickass/OpenMachineCore/releases)
 
 OpenMachineCore (Backend) is a Go-based automation platform for industrial machine control. It combines a Modbus TCP - EtherCat and more planned - device layer, a workflow engine, and a machine state controller with REST, Websocket and gRPC APIs. 
-OpenMachineCore HMI is coming soon for displaying machine state and give the user a place for basic controling of the machine
-OpenMachineCore Configurator is coming soon to to help set up workflows, devices and so on
+
+OpenMachineCore HMI is coming soon for displaying machine state and give the user a place for basic controling of the machine.
+
+OpenMachineCore Configurator is coming soon too to help set up workflows, devices and so on
 
 You can also use your own HMI and use the APIs to control/display the machine states and devices
 
@@ -56,9 +58,9 @@ Modbus:
 
 ### Prerequisites
 
-- Go 1.21+
-- PostgreSQL
-- (Optional) Modbus simulator (for `test-modbus-sim` device)
+- Go 1.25 or higher
+- PostgreSQL 13 or higher
+- Optional: Modbus simulator for testing
 
 ### Clone and Build
 

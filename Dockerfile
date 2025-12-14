@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -8,7 +8,8 @@ RUN apk add --no-cache git make protobuf protobuf-dev
 
 # Install Go protobuf plugins
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
-    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && \
+    go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@latest
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -21,7 +22,7 @@ COPY . .
 RUN make proto
 
 # Build binary
-RUN make build
+RUN CGO_ENABLED=0 GOOS=linux make build
 
 # Runtime stage
 FROM alpine:latest
@@ -33,6 +34,7 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/bin/openmachinecore .
 COPY --from=builder /app/configs ./configs
+COPY --from=builder /app/device-descriptors ./device-descriptors
 
 # Create non-root user
 RUN addgroup -g 1000 openmachine && \

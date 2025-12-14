@@ -1,8 +1,8 @@
 package websocket
 
 import (
-	"time"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
@@ -36,10 +36,10 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a WebSocket client connection
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
-	logger *zap.Logger 
+	hub    *Hub
+	conn   *websocket.Conn
+	send   chan []byte
+	logger *zap.Logger
 }
 
 // readPump handles reading messages from the WebSocket connection
@@ -59,8 +59,8 @@ func (c *Client) readPump() {
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, 
-				websocket.CloseGoingAway, 
+			if websocket.IsUnexpectedCloseError(err,
+				websocket.CloseGoingAway,
 				websocket.CloseAbnormalClosure) {
 				c.logger.Warn("WebSocket read error",
 					zap.Error(err),
@@ -135,7 +135,7 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		hub:    hub,
 		conn:   conn,
 		send:   make(chan []byte, sendBufferSize),
-		logger: hub.logger,  // <- Logger vom Hub übernehmen
+		logger: hub.logger, // <- Logger vom Hub übernehmen
 	}
 
 	client.hub.register <- client
