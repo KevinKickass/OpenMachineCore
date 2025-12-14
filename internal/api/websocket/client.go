@@ -1,9 +1,13 @@
 package websocket
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
+	"github.com/KevinKickass/OpenMachineCore/internal/auth"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
@@ -36,10 +40,13 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a WebSocket client connection
 type Client struct {
-	hub    *Hub
-	conn   *websocket.Conn
-	send   chan []byte
-	logger *zap.Logger
+	hub           *Hub
+	conn          *websocket.Conn
+	send          chan []byte
+	logger        *zap.Logger
+	authenticated bool
+	permissions   []auth.Permission
+	userID        *uuid.UUID
 }
 
 // readPump handles reading messages from the WebSocket connection
@@ -50,15 +57,13 @@ func (c *Client) readPump() {
 	}()
 
 	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(pongWait))
-		return nil
-	})
+
+	// 10 seconds timeout for authentication
+	c.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 	for {
-		_, message, err := c.conn.ReadMessage()
-		if err != nil {
+		var msg map[string]interface{}
+		if err := c.conn.ReadJSON(&msg); err != nil {
 			if websocket.IsUnexpectedCloseError(err,
 				websocket.CloseGoingAway,
 				websocket.CloseAbnormalClosure) {
@@ -69,12 +74,86 @@ func (c *Client) readPump() {
 			break
 		}
 
-		// Process incoming client messages if needed
-		c.logger.Debug("Received message from client",
-			zap.String("remote_addr", c.conn.RemoteAddr().String()),
-			zap.ByteString("message", message))
-		// TODO: Handle client commands (e.g., subscribe to specific devices)
+		// First message MUST be authentication
+		if !c.authenticated {
+			if msgType, ok := msg["type"].(string); !ok || msgType != "auth" {
+				c.sendAuthFailed("First message must be authentication")
+				c.conn.Close()
+				return
+			}
+
+			token, ok := msg["token"].(string)
+			if !ok || token == "" {
+				c.sendAuthFailed("Missing token in auth message")
+				c.conn.Close()
+				return
+			}
+
+			// Validate token via AuthService
+			authService := c.hub.authService
+			permissions, err := authService.ValidateToken(
+				context.Background(),
+				token,
+				c.conn.RemoteAddr().String(),
+				"", // User-Agent not available in WebSocket
+			)
+
+			if err != nil {
+				c.logger.Warn("WebSocket authentication failed",
+					zap.Error(err),
+					zap.String("remote_addr", c.conn.RemoteAddr().String()))
+				c.sendAuthFailed("Invalid or expired token")
+				c.conn.Close()
+				return
+			}
+
+			// Authentication successful
+			c.authenticated = true
+			c.permissions = permissions
+			c.conn.SetReadDeadline(time.Time{}) // Remove deadline
+
+			c.sendAuthSuccess(permissions)
+			c.logger.Info("WebSocket client authenticated",
+				zap.String("remote_addr", c.conn.RemoteAddr().String()),
+				zap.Any("permissions", permissions))
+
+			// NOW register to hub (only after auth)
+			c.hub.register <- c
+			continue
+		}
+
+		// Handle other client messages (subscriptions, etc.)
+		c.handleMessage(msg)
 	}
+}
+
+func (c *Client) sendAuthSuccess(permissions []auth.Permission) {
+	msg := map[string]interface{}{
+		"type":        "auth_success",
+		"timestamp":   time.Now(),
+		"permissions": permissions,
+	}
+	data, _ := json.Marshal(msg)
+	c.send <- data
+}
+
+func (c *Client) sendAuthFailed(reason string) {
+	msg := map[string]interface{}{
+		"type":      "auth_failed",
+		"timestamp": time.Now(),
+		"reason":    reason,
+	}
+	data, _ := json.Marshal(msg)
+	c.send <- data
+}
+
+func (c *Client) handleMessage(msg map[string]interface{}) {
+	// Handle client commands (e.g., subscribe to specific devices)
+	c.logger.Debug("Received client message",
+		zap.String("remote_addr", c.conn.RemoteAddr().String()),
+		zap.Any("message", msg))
+
+	// TODO: Implement subscription logic
 }
 
 // writePump handles writing messages to the WebSocket connection

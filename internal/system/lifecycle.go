@@ -10,6 +10,7 @@ import (
 	pb "github.com/KevinKickass/OpenMachineCore/api/proto"
 	"github.com/KevinKickass/OpenMachineCore/internal/api/rest"
 	ws "github.com/KevinKickass/OpenMachineCore/internal/api/websocket"
+	"github.com/KevinKickass/OpenMachineCore/internal/auth"
 	"github.com/KevinKickass/OpenMachineCore/internal/config"
 	"github.com/KevinKickass/OpenMachineCore/internal/devices"
 	"github.com/KevinKickass/OpenMachineCore/internal/interfaces"
@@ -33,6 +34,7 @@ type LifecycleManager struct {
 	eventStreamer     *streaming.EventStreamer
 	workflowService   *streaming.WorkflowService
 	machineController *machine.Controller
+	authService       *auth.AuthService
 	logger            *zap.Logger
 	wsHub             *ws.Hub
 
@@ -54,6 +56,7 @@ func NewLifecycleManager(
 	storage *storage.PostgresClient,
 	cfg *config.Config,
 	logger *zap.Logger,
+	authService *auth.AuthService,
 ) *LifecycleManager {
 	deviceManager, err := devices.NewManager(cfg.Devices.SearchPaths, logger)
 	if err != nil {
@@ -63,7 +66,7 @@ func NewLifecycleManager(
 	// Initialize Workflow Engine components
 	eventStreamer := streaming.NewEventStreamer()
 	stepExecutor := executor.NewStepExecutor(deviceManager, storage)
-	wsHub := ws.NewHub(logger)
+	wsHub := ws.NewHub(logger, authService)
 	workflowEngine := engine.NewEngine(storage, stepExecutor, eventStreamer, logger, wsHub)
 	workflowService := streaming.NewWorkflowService(eventStreamer)
 
@@ -270,7 +273,7 @@ func (lm *LifecycleManager) startGRPCServer() error {
 }
 
 func (lm *LifecycleManager) startRESTServer() error {
-	lm.restServer = rest.NewServer(lm.config, lm, lm.logger, lm.wsHub)
+	lm.restServer = rest.NewServer(lm.config, lm, lm.logger, lm.wsHub, lm.authService)
 	return lm.restServer.Start()
 }
 

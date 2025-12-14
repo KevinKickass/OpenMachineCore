@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/KevinKickass/OpenMachineCore/internal/auth"
 	"go.uber.org/zap"
 )
 
@@ -26,16 +27,20 @@ type Hub struct {
 
 	// Logger
 	logger *zap.Logger
+
+	//Auth Service
+	authService *auth.AuthService
 }
 
 // NewHub creates a new Hub instance
-func NewHub(logger *zap.Logger) *Hub {
+func NewHub(logger *zap.Logger, authService *auth.AuthService) *Hub {
 	return &Hub{
-		broadcast:  make(chan Message, 256),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
-		logger:     logger,
+		broadcast:   make(chan Message, 256),
+		register:    make(chan *Client),
+		unregister:  make(chan *Client),
+		clients:     make(map[*Client]bool),
+		logger:      logger,
+		authService: authService,
 	}
 }
 

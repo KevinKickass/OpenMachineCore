@@ -12,6 +12,14 @@ database:
   password: omc
   max_connections: 25
 
+# Auth configuration
+auth:
+  jwt_secret_env: "JWT_SECRET"              # Environment Variable Name
+  access_token_ttl: 60m                     # 60 minutes
+  refresh_token_ttl: 168h                   # 7 days
+  max_failed_login_attempts: 5
+  account_lock_duration: 15m
+
 modbus:
   default_timeout: 1s
   default_poll_interval: 100ms

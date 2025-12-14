@@ -196,6 +196,22 @@ dev-tools: proto-install
 	$(GOCMD) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	@echo "Development tools installed"
 
+# Generate machine token
+.PHONY: generate-token
+generate-token:
+	@read -p "Enter token name (e.g., 'HMI Line 1'): " name; \
+	./bin/openmachinecore --generate-machine-token "$$name"
+
+# Create admin user
+.PHONY: create-admin
+create-admin:
+	./bin/openmachinecore --create-admin
+
+# Run with custom config
+.PHONY: run-config
+run-config:
+	./bin/openmachinecore --config=$(CONFIG)
+
 # Help
 help:
 	@echo "OpenMachineCore Makefile"
