@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package openmachinecore.v1;
+
+option go_package = "github.com/KevinKickass/OpenMachineCore/api/proto/v1";
+
+import "api/proto/common.proto";
+
+service MachineService {
+  rpc GetStatus(StatusRequest) returns (MachineStatusResponse);
+  rpc StreamStatus(StatusRequest) returns (stream MachineStatusResponse);
+}
+
+message MachineStatusResponse {
+  string state = 1;
+  int64 timestamp = 2;
+}

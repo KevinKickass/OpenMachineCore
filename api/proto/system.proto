@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package openmachinecore.v1;
+
+option go_package = "github.com/KevinKickass/OpenMachineCore/api/proto/v1";
+
+import "api/proto/common.proto";
+
+service SystemService {
+  rpc StreamStatus(StatusRequest) returns (stream SystemStatus);
+  rpc TriggerUpdate(UpdateRequest) returns (UpdateResponse);
+  rpc GetStatus(StatusRequest) returns (SystemStatus);
+}
+
+message SystemStatus {
+  string state = 1;
+  UpdateProgress update_progress = 2;
+  int64 timestamp = 3;
+}
+
+message UpdateProgress {
+  string phase = 1;
+  int32 progress = 2;
+  string message = 3;
+}
+
+message UpdateRequest {
+  string workflow_path = 1;
+}
+
+message UpdateResponse {
+  bool success = 1;
+  string message = 2;
+}

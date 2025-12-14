@@ -1,0 +1,22 @@
+# configs/config.yaml
+server:
+  grpc_port: 50051
+  http_port: 8080
+  shutdown_timeout: 30s
+
+database:
+  host: localhost
+  port: 5432
+  database: openmachinecore
+  user: omc
+  password: omc
+  max_connections: 25
+
+modbus:
+  default_timeout: 1s
+  default_poll_interval: 100ms
+
+device_profiles:
+  search_paths:
+    - "device-descriptors/vendors"
+    - "/etc/openmachinecore/profiles"

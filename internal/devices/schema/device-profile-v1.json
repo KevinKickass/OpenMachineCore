@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openmachinecore.org/schemas/device-profile-v1.json",
+  "title": "OpenMachineCore Device Profile",
+  "type": "object",
+  "required": ["device_profile", "connection", "registers"],
+  "properties": {
+    "device_profile": {
+      "type": "object",
+      "required": ["id", "vendor", "model", "version"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "vendor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "required": ["protocol", "port", "unit_id"],
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "enum": ["modbus_tcp"]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "unit_id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "poll_interval_ms": {
+          "type": "integer",
+          "minimum": 10
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 100
+        }
+      }
+    },
+    "registers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "address", "type", "data_type", "access"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]*$"
+          },
+          "address": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "type": {
+            "type": "string",
+            "enum": ["coil", "discrete_input", "input_register", "holding_register"]
+          },
+          "data_type": {
+            "type": "string",
+            "enum": ["bool", "int16", "uint16", "int32", "uint32", "float32", "float64"]
+          },
+          "scale_factor": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string",
+            "enum": ["read_only", "read_write"]
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "register_groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "registers"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "poll_interval_ms": {
+            "type": "integer",
+            "minimum": 10
+          },
+          "registers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

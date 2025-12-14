@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package openmachinecore.v1;
+
+option go_package = "github.com/KevinKickass/OpenMachineCore/api/proto/v1";
+
+message StatusRequest {}

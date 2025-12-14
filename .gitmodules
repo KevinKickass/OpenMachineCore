@@ -1,3 +1,6 @@
 [submodule "device-descriptors"]
 	path = device-descriptors
 	url = git@github.com:KevinKickass/omc-device-descriptors
+[submodule "third_party/googleapis"]
+	path = third_party/googleapis
+	url = https://github.com/googleapis/googleapis.git
