@@ -119,6 +119,9 @@ func (c *Client) readPump() {
 
 			// NOW register to hub (only after auth)
 			c.hub.register <- c
+
+			// Send initial machine status if available
+			c.sendInitialMachineStatus()
 			continue
 		}
 
@@ -142,6 +145,21 @@ func (c *Client) sendAuthFailed(reason string) {
 		"type":      "auth_failed",
 		"timestamp": time.Now(),
 		"reason":    reason,
+	}
+	data, _ := json.Marshal(msg)
+	c.send <- data
+}
+
+func (c *Client) sendInitialMachineStatus() {
+	if c.hub.machineStatusProvider == nil {
+		return
+	}
+
+	status := c.hub.machineStatusProvider.GetStatus()
+	msg := map[string]interface{}{
+		"type":      "machine_state",
+		"timestamp": time.Now(),
+		"payload":   status,
 	}
 	data, _ := json.Marshal(msg)
 	c.send <- data

@@ -68,10 +68,13 @@ func NewLifecycleManager(
 	stepExecutor := executor.NewStepExecutor(deviceManager, storage)
 	wsHub := ws.NewHub(logger, authService)
 	workflowEngine := engine.NewEngine(storage, stepExecutor, eventStreamer, logger, wsHub)
-	workflowService := streaming.NewWorkflowService(eventStreamer)
+	workflowService := streaming.NewWorkflowService(eventStreamer, storage)
 
 	// Initialize Machine Controller
 	machineController := machine.NewController(logger, workflowEngine, storage, wsHub)
+
+	// Set machine controller as status provider for WebSocket via wrapper
+	wsHub.SetMachineStatusProvider(&machineStatusAdapter{controller: machineController})
 
 	return &LifecycleManager{
 		config:            cfg,
@@ -472,4 +475,13 @@ func (lm *LifecycleManager) WorkflowEngine() *engine.Engine {
 // Expose hub for other components to broadcast messages
 func (lm *LifecycleManager) GetWebSocketHub() *ws.Hub {
 	return lm.wsHub
+}
+
+// machineStatusAdapter adapts MachineController to MachineStatusProvider interface
+type machineStatusAdapter struct {
+	controller *machine.Controller
+}
+
+func (a *machineStatusAdapter) GetStatus() any {
+	return a.controller.GetStatus()
 }

@@ -9,6 +9,7 @@ import (
 type Workflow struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
+	ProgramName string            `json:"program_name"` // "main", "sub_pick", etc.
 	Description string            `json:"description,omitempty"`
 	Version     string            `json:"version"`
 	Steps       []Step            `json:"steps"`
@@ -23,8 +24,9 @@ type LoopConfig struct {
 }
 
 type Step struct {
-	Name string   `json:"name"`
-	Type StepType `json:"type"`
+	Number string   `json:"number"` // "10", "20", "30.1" for parallel branches
+	Name   string   `json:"name"`
+	Type   StepType `json:"type"`
 
 	// Device Step
 	DeviceID   string         `json:"device_id,omitempty"`
@@ -100,4 +102,44 @@ func ParseWorkflow(data []byte) (*Workflow, error) {
 
 func (wf *Workflow) ToJSON() ([]byte, error) {
 	return json.Marshal(wf)
+}
+
+// CallFrame represents a single level in the execution call stack
+type CallFrame struct {
+	WorkflowID  string `json:"workflow_id"`
+	ProgramName string `json:"program_name"`
+	StepNumber  string `json:"step_number"`
+}
+
+// ExecutionState tracks the current execution state including call stack
+type ExecutionState struct {
+	CallStack          []CallFrame `json:"call_stack"`
+	CurrentStepNumber  string      `json:"current_step_number"`
+	HierarchicalStepID string      `json:"hierarchical_step_id"`
+	Depth              int         `json:"depth"`
+}
+
+// BuildHierarchicalStepID constructs the full hierarchical step ID from call stack
+// Example output: "main:S10:sub_pick:S20:sub_gripper:S5"
+func BuildHierarchicalStepID(callStack []CallFrame) string {
+	if len(callStack) == 0 {
+		return ""
+	}
+
+	parts := []string{}
+	for _, frame := range callStack {
+		parts = append(parts, frame.ProgramName)
+		parts = append(parts, "S"+frame.StepNumber)
+	}
+
+	// Build the hierarchical ID by joining all parts with colons
+	result := ""
+	for i, part := range parts {
+		if i == 0 {
+			result = part
+		} else {
+			result += ":" + part
+		}
+	}
+	return result
 }

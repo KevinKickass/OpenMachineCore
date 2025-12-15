@@ -31,10 +31,12 @@ message ExecutionStatusResponse {
   string workflow_id = 2;
   string status = 3;
   int32 current_step = 4;
+  string current_step_id = 9;       // Hierarchical step ID, e.g., "main:S10:sub_pick:S20"
   string error = 5;
   repeated StepStatus steps = 6;
   int64 started_at = 7;
   int64 completed_at = 8;
+  repeated CallFrame call_stack = 10; // Current execution call stack
 }
 
 message StepStatus {
@@ -43,4 +45,12 @@ message StepStatus {
   string status = 3;
   string output = 4;
   string error = 5;
+  string hierarchical_step_id = 6; // Full hierarchical step ID, e.g., "main:S10:sub_pick:S20"
+  int32 depth = 7;                 // Nesting depth in call stack
+}
+
+message CallFrame {
+  string workflow_id = 1;
+  string program_name = 2;
+  string step_number = 3;
 }

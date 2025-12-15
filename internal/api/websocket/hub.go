@@ -8,6 +8,11 @@ import (
 	"go.uber.org/zap"
 )
 
+// MachineStatusProvider interface for getting current machine status
+type MachineStatusProvider interface {
+	GetStatus() any
+}
+
 // Hub maintains active WebSocket clients and broadcasts messages
 type Hub struct {
 	// Registered clients
@@ -30,6 +35,9 @@ type Hub struct {
 
 	//Auth Service
 	authService *auth.AuthService
+
+	// Machine status provider (optional)
+	machineStatusProvider MachineStatusProvider
 }
 
 // NewHub creates a new Hub instance
@@ -42,6 +50,11 @@ func NewHub(logger *zap.Logger, authService *auth.AuthService) *Hub {
 		logger:      logger,
 		authService: authService,
 	}
+}
+
+// SetMachineStatusProvider sets the machine status provider
+func (h *Hub) SetMachineStatusProvider(provider MachineStatusProvider) {
+	h.machineStatusProvider = provider
 }
 
 // Run starts the hub's main event loop

@@ -13,15 +13,17 @@ import (
 
 // Workflow execution types
 type WorkflowExecution struct {
-	ID          uuid.UUID
-	WorkflowID  uuid.UUID
-	Status      ExecutionStatus
-	CurrentStep int
-	Input       json.RawMessage
-	Output      json.RawMessage
-	Error       string
-	StartedAt   time.Time
-	CompletedAt *time.Time
+	ID            uuid.UUID
+	WorkflowID    uuid.UUID
+	Status        ExecutionStatus
+	CurrentStep   int             // Kept for backward compatibility
+	CurrentStepID string          // Hierarchical step ID, e.g., "main:S10:sub_pick:S20"
+	CallStack     json.RawMessage // JSON array of CallFrames
+	Input         json.RawMessage
+	Output        json.RawMessage
+	Error         string
+	StartedAt     time.Time
+	CompletedAt   *time.Time
 }
 
 type ExecutionStatus string
@@ -35,16 +37,18 @@ const (
 )
 
 type ExecutionStep struct {
-	ID          uuid.UUID
-	ExecutionID uuid.UUID
-	StepIndex   int
-	StepName    string
-	Status      ExecutionStatus
-	Input       json.RawMessage
-	Output      json.RawMessage
-	Error       string
-	StartedAt   time.Time
-	CompletedAt *time.Time
+	ID                 uuid.UUID
+	ExecutionID        uuid.UUID
+	StepIndex          int // Kept for backward compatibility
+	StepName           string
+	HierarchicalStepID string // Full hierarchical ID, e.g., "main:S10:sub_pick:S20"
+	Depth              int    // Nesting depth (0=main, 1=first sub, 2=nested sub, etc.)
+	Status             ExecutionStatus
+	Input              json.RawMessage
+	Output             json.RawMessage
+	Error              string
+	StartedAt          time.Time
+	CompletedAt        *time.Time
 }
 
 type ExecutionEvent struct {
@@ -281,10 +285,10 @@ func (p *PostgresClient) DeviceExistsEnabledByName(ctx context.Context, deviceNa
 // CreateExecution creates a new workflow execution record
 func (p *PostgresClient) CreateExecution(ctx context.Context, exec *WorkflowExecution) error {
 	_, err := p.pool.Exec(ctx, `
-        INSERT INTO workflow_executions 
-        (id, workflow_id, status, current_step, input, started_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
-    `, exec.ID, exec.WorkflowID, exec.Status, exec.CurrentStep, exec.Input, exec.StartedAt)
+        INSERT INTO workflow_executions
+        (id, workflow_id, status, current_step, current_step_id, call_stack, input, started_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, exec.ID, exec.WorkflowID, exec.Status, exec.CurrentStep, exec.CurrentStepID, exec.CallStack, exec.Input, exec.StartedAt)
 	return err
 }
 
@@ -292,9 +296,9 @@ func (p *PostgresClient) CreateExecution(ctx context.Context, exec *WorkflowExec
 func (p *PostgresClient) UpdateExecution(ctx context.Context, exec *WorkflowExecution) error {
 	_, err := p.pool.Exec(ctx, `
         UPDATE workflow_executions
-        SET status = $1, current_step = $2, output = $3, error = $4, completed_at = $5
-        WHERE id = $6
-    `, exec.Status, exec.CurrentStep, exec.Output, exec.Error, exec.CompletedAt, exec.ID)
+        SET status = $1, current_step = $2, current_step_id = $3, call_stack = $4, output = $5, error = $6, completed_at = $7
+        WHERE id = $8
+    `, exec.Status, exec.CurrentStep, exec.CurrentStepID, exec.CallStack, exec.Output, exec.Error, exec.CompletedAt, exec.ID)
 	return err
 }
 
@@ -302,9 +306,9 @@ func (p *PostgresClient) UpdateExecution(ctx context.Context, exec *WorkflowExec
 func (p *PostgresClient) GetExecution(ctx context.Context, id uuid.UUID) (*WorkflowExecution, error) {
 	var exec WorkflowExecution
 	err := p.pool.QueryRow(ctx, `
-        SELECT id, workflow_id, status, current_step, input, output, error, started_at, completed_at
+        SELECT id, workflow_id, status, current_step, current_step_id, call_stack, input, output, error, started_at, completed_at
         FROM workflow_executions WHERE id = $1
-    `, id).Scan(&exec.ID, &exec.WorkflowID, &exec.Status, &exec.CurrentStep,
+    `, id).Scan(&exec.ID, &exec.WorkflowID, &exec.Status, &exec.CurrentStep, &exec.CurrentStepID, &exec.CallStack,
 		&exec.Input, &exec.Output, &exec.Error, &exec.StartedAt, &exec.CompletedAt)
 
 	if err == pgx.ErrNoRows {
@@ -317,9 +321,9 @@ func (p *PostgresClient) GetExecution(ctx context.Context, id uuid.UUID) (*Workf
 func (p *PostgresClient) CreateExecutionStep(ctx context.Context, step *ExecutionStep) error {
 	_, err := p.pool.Exec(ctx, `
         INSERT INTO execution_steps
-        (id, execution_id, step_index, step_name, status, input, started_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, step.ID, step.ExecutionID, step.StepIndex, step.StepName, step.Status, step.Input, step.StartedAt)
+        (id, execution_id, step_index, step_name, hierarchical_step_id, depth, status, input, started_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, step.ID, step.ExecutionID, step.StepIndex, step.StepName, step.HierarchicalStepID, step.Depth, step.Status, step.Input, step.StartedAt)
 	return err
 }
 
@@ -327,9 +331,9 @@ func (p *PostgresClient) CreateExecutionStep(ctx context.Context, step *Executio
 func (p *PostgresClient) UpdateExecutionStep(ctx context.Context, step *ExecutionStep) error {
 	_, err := p.pool.Exec(ctx, `
         UPDATE execution_steps
-        SET status = $1, output = $2, error = $3, completed_at = $4
-        WHERE id = $5
-    `, step.Status, step.Output, step.Error, step.CompletedAt, step.ID)
+        SET status = $1, output = $2, error = $3, completed_at = $4, hierarchical_step_id = $5, depth = $6
+        WHERE id = $7
+    `, step.Status, step.Output, step.Error, step.CompletedAt, step.HierarchicalStepID, step.Depth, step.ID)
 	return err
 }
 
@@ -345,7 +349,7 @@ func (p *PostgresClient) CreateExecutionEvent(ctx context.Context, event *Execut
 // GetExecutionSteps retrieves all steps for an execution
 func (p *PostgresClient) GetExecutionSteps(ctx context.Context, executionID uuid.UUID) ([]ExecutionStep, error) {
 	rows, err := p.pool.Query(ctx, `
-        SELECT id, execution_id, step_index, step_name, status, input, output, error, started_at, completed_at
+        SELECT id, execution_id, step_index, step_name, hierarchical_step_id, depth, status, input, output, error, started_at, completed_at
         FROM execution_steps
         WHERE execution_id = $1
         ORDER BY step_index
@@ -359,7 +363,7 @@ func (p *PostgresClient) GetExecutionSteps(ctx context.Context, executionID uuid
 	steps := make([]ExecutionStep, 0)
 	for rows.Next() {
 		var step ExecutionStep
-		err := rows.Scan(&step.ID, &step.ExecutionID, &step.StepIndex, &step.StepName,
+		err := rows.Scan(&step.ID, &step.ExecutionID, &step.StepIndex, &step.StepName, &step.HierarchicalStepID, &step.Depth,
 			&step.Status, &step.Input, &step.Output, &step.Error, &step.StartedAt, &step.CompletedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan step: %w", err)

@@ -16,6 +16,73 @@ import (
 	"go.uber.org/zap"
 )
 
+// ExecutionTracker maintains call stack and hierarchical step information for a running workflow
+type ExecutionTracker struct {
+	ExecutionID uuid.UUID
+	CallStack   []definition.CallFrame // Stack of (workflow_id, program_name, step_number)
+	mu          sync.RWMutex
+}
+
+// NewExecutionTracker creates a new execution tracker
+func NewExecutionTracker(executionID uuid.UUID) *ExecutionTracker {
+	return &ExecutionTracker{
+		ExecutionID: executionID,
+		CallStack:   make([]definition.CallFrame, 0),
+	}
+}
+
+// Push adds a new level to the call stack when entering a subroutine
+func (et *ExecutionTracker) Push(workflowID string, programName string, stepNumber string) {
+	et.mu.Lock()
+	defer et.mu.Unlock()
+	et.CallStack = append(et.CallStack, definition.CallFrame{
+		WorkflowID:  workflowID,
+		ProgramName: programName,
+		StepNumber:  stepNumber,
+	})
+}
+
+// Pop removes a level from the call stack when exiting a subroutine
+func (et *ExecutionTracker) Pop() {
+	et.mu.Lock()
+	defer et.mu.Unlock()
+	if len(et.CallStack) > 0 {
+		et.CallStack = et.CallStack[:len(et.CallStack)-1]
+	}
+}
+
+// SetCurrentStep updates the top of the call stack with the current step number
+func (et *ExecutionTracker) SetCurrentStep(stepNumber string) {
+	et.mu.Lock()
+	defer et.mu.Unlock()
+	if len(et.CallStack) > 0 {
+		et.CallStack[len(et.CallStack)-1].StepNumber = stepNumber
+	}
+}
+
+// GetHierarchicalStepID returns the full hierarchical step ID
+func (et *ExecutionTracker) GetHierarchicalStepID() string {
+	et.mu.RLock()
+	defer et.mu.RUnlock()
+	return definition.BuildHierarchicalStepID(et.CallStack)
+}
+
+// GetCallStackCopy returns a copy of the current call stack
+func (et *ExecutionTracker) GetCallStackCopy() []definition.CallFrame {
+	et.mu.RLock()
+	defer et.mu.RUnlock()
+	callStackCopy := make([]definition.CallFrame, len(et.CallStack))
+	copy(callStackCopy, et.CallStack)
+	return callStackCopy
+}
+
+// GetDepth returns the current nesting depth
+func (et *ExecutionTracker) GetDepth() int {
+	et.mu.RLock()
+	defer et.mu.RUnlock()
+	return len(et.CallStack)
+}
+
 type Engine struct {
 	storage  *storage.PostgresClient
 	executor *executor.StepExecutor
@@ -23,18 +90,20 @@ type Engine struct {
 	logger   *zap.Logger
 	wsHub    *websocket.Hub
 
-	runningMu       sync.RWMutex
-	runningContexts map[uuid.UUID]context.CancelFunc
+	runningMu         sync.RWMutex
+	runningContexts   map[uuid.UUID]context.CancelFunc
+	executionTrackers map[uuid.UUID]*ExecutionTracker // Track call stacks per execution
 }
 
 func NewEngine(storage *storage.PostgresClient, executor *executor.StepExecutor, streamer *streaming.EventStreamer, logger *zap.Logger, wsHub *websocket.Hub) *Engine {
 	return &Engine{
-		storage:         storage,
-		executor:        executor,
-		streamer:        streamer,
-		runningContexts: make(map[uuid.UUID]context.CancelFunc),
-		logger:          logger,
-		wsHub:           wsHub,
+		storage:           storage,
+		executor:          executor,
+		streamer:          streamer,
+		runningContexts:   make(map[uuid.UUID]context.CancelFunc),
+		executionTrackers: make(map[uuid.UUID]*ExecutionTracker),
+		logger:            logger,
+		wsHub:             wsHub,
 	}
 }
 
@@ -82,8 +151,14 @@ func (e *Engine) ExecuteWorkflow(ctx context.Context, workflowID uuid.UUID, inpu
 	// Create cancellable context for this execution
 	execCtx, cancel := context.WithCancel(context.Background())
 
+	// Create execution tracker for hierarchical step tracking
+	tracker := NewExecutionTracker(executionID)
+	// Push the root workflow onto the call stack
+	tracker.Push(workflowID.String(), workflowDef.ProgramName, "0")
+
 	e.runningMu.Lock()
 	e.runningContexts[executionID] = cancel
+	e.executionTrackers[executionID] = tracker
 	e.runningMu.Unlock()
 
 	// Execute asynchronously
@@ -91,6 +166,7 @@ func (e *Engine) ExecuteWorkflow(ctx context.Context, workflowID uuid.UUID, inpu
 		defer func() {
 			e.runningMu.Lock()
 			delete(e.runningContexts, executionID)
+			delete(e.executionTrackers, executionID)
 			e.runningMu.Unlock()
 		}()
 		e.runExecution(execCtx, exec, workflowDef, input)
@@ -122,6 +198,11 @@ func (e *Engine) cancelExecution(ctx context.Context, exec *storage.WorkflowExec
 }
 
 func (e *Engine) runExecution(ctx context.Context, exec *storage.WorkflowExecution, workflowDef *definition.Workflow, input map[string]any) {
+	// Get tracker for this execution
+	e.runningMu.RLock()
+	tracker, _ := e.executionTrackers[exec.ID]
+	e.runningMu.RUnlock()
+
 	// Update status to running
 	exec.Status = storage.StatusRunning
 	e.storage.UpdateExecution(ctx, exec)
@@ -146,6 +227,15 @@ func (e *Engine) runExecution(ctx context.Context, exec *storage.WorkflowExecuti
 			exec.Status = storage.StatusCancelled
 			now := time.Now()
 			exec.CompletedAt = &now
+
+			if tracker != nil {
+				exec.CurrentStepID = tracker.GetHierarchicalStepID()
+				callStack := tracker.GetCallStackCopy()
+				if callStackJSON, err := json.Marshal(callStack); err == nil {
+					exec.CallStack = callStackJSON
+				}
+			}
+
 			e.storage.UpdateExecution(ctx, exec)
 
 			if e.wsHub != nil {
@@ -175,6 +265,15 @@ func (e *Engine) runExecution(ctx context.Context, exec *storage.WorkflowExecuti
 
 			// Execute step with correct parameters
 			_, err := e.executeStep(ctx, exec.ID, i, &step, input)
+
+			// Update execution with current step tracking
+			if tracker != nil {
+				exec.CurrentStepID = tracker.GetHierarchicalStepID()
+				callStack := tracker.GetCallStackCopy()
+				if callStackJSON, err := json.Marshal(callStack); err == nil {
+					exec.CallStack = callStackJSON
+				}
+			}
 
 			if err != nil {
 				// Step failed
@@ -211,9 +310,18 @@ func (e *Engine) runExecution(ctx context.Context, exec *storage.WorkflowExecuti
 	}
 
 	// All steps completed successfully
-	exec.Status = storage.StatusSuccess // <- Geändert von StatusCompleted
+	exec.Status = storage.StatusSuccess
 	now := time.Now()
 	exec.CompletedAt = &now
+
+	if tracker != nil {
+		exec.CurrentStepID = tracker.GetHierarchicalStepID()
+		callStack := tracker.GetCallStackCopy()
+		if callStackJSON, err := json.Marshal(callStack); err == nil {
+			exec.CallStack = callStackJSON
+		}
+	}
+
 	e.storage.UpdateExecution(ctx, exec)
 
 	if e.wsHub != nil {
@@ -222,30 +330,49 @@ func (e *Engine) runExecution(ctx context.Context, exec *storage.WorkflowExecuti
 			exec.ID.String(),
 			exec.WorkflowID.String(),
 			"",
-			string(storage.StatusSuccess), // <- Geändert
+			string(storage.StatusSuccess),
 			"Workflow execution completed successfully",
 		))
 	}
 }
 
 func (e *Engine) executeStep(ctx context.Context, executionID uuid.UUID, index int, step *definition.Step, input map[string]any) (map[string]any, error) {
+	// Get tracker for this execution
+	e.runningMu.RLock()
+	tracker, exists := e.executionTrackers[executionID]
+	e.runningMu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("execution tracker not found for execution %s", executionID)
+	}
+
+	// Update current step in tracker
+	tracker.SetCurrentStep(step.Number)
+
 	stepID := uuid.New()
 	inputJSON, _ := json.Marshal(input)
 
+	// Get the hierarchical step ID
+	hierarchicalID := tracker.GetHierarchicalStepID()
+
 	stepExec := &storage.ExecutionStep{
-		ID:          stepID,
-		ExecutionID: executionID,
-		StepIndex:   index,
-		StepName:    step.Name,
-		Status:      storage.StatusRunning,
-		Input:       inputJSON,
-		StartedAt:   time.Now(),
+		ID:                 stepID,
+		ExecutionID:        executionID,
+		StepIndex:          index,
+		StepName:           step.Name,
+		HierarchicalStepID: hierarchicalID,
+		Depth:              tracker.GetDepth(),
+		Status:             storage.StatusRunning,
+		Input:              inputJSON,
+		StartedAt:          time.Now(),
 	}
 
 	e.storage.CreateExecutionStep(ctx, stepExec)
 	e.publishEvent(ctx, executionID, "step.started", map[string]any{
-		"step_index": index,
-		"step_name":  step.Name,
+		"step_index":           index,
+		"step_name":            step.Name,
+		"hierarchical_step_id": hierarchicalID,
+		"depth":                tracker.GetDepth(),
 	})
 
 	// Execute step
@@ -259,9 +386,10 @@ func (e *Engine) executeStep(ctx context.Context, executionID uuid.UUID, index i
 		stepExec.Error = err.Error()
 		e.storage.UpdateExecutionStep(ctx, stepExec)
 		e.publishEvent(ctx, executionID, "step.failed", map[string]any{
-			"step_index": index,
-			"step_name":  step.Name,
-			"error":      err.Error(),
+			"step_index":           index,
+			"step_name":            step.Name,
+			"hierarchical_step_id": hierarchicalID,
+			"error":                err.Error(),
 		})
 		return nil, err
 	}
@@ -271,9 +399,10 @@ func (e *Engine) executeStep(ctx context.Context, executionID uuid.UUID, index i
 	stepExec.Output = outputJSON
 	e.storage.UpdateExecutionStep(ctx, stepExec)
 	e.publishEvent(ctx, executionID, "step.completed", map[string]any{
-		"step_index": index,
-		"step_name":  step.Name,
-		"output":     output,
+		"step_index":           index,
+		"step_name":            step.Name,
+		"hierarchical_step_id": hierarchicalID,
+		"output":               output,
 	})
 
 	return output, nil
