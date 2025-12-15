@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/KevinKickass/OpenMachineCore/internal/types"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -179,10 +180,7 @@ func (s *Server) getVendorModules(c *gin.Context) {
 
 	s.logger.Warn("Vendor not found", zap.String("vendor", vendor))
 
-	c.JSON(http.StatusNotFound, gin.H{
-		"error":  "Vendor not found",
-		"vendor": vendor,
-	})
+	c.JSON(http.StatusNotFound, types.NewErrorResponse("MODULE_404", "Vendor not found", vendor))
 }
 
 // GET /api/v1/modules/:vendor/:model
@@ -296,9 +294,5 @@ func (s *Server) getModule(c *gin.Context) {
 		zap.String("vendor", vendor),
 		zap.String("model", model))
 
-	c.JSON(http.StatusNotFound, gin.H{
-		"error":  "Module not found",
-		"vendor": vendor,
-		"model":  model,
-	})
+	c.JSON(http.StatusNotFound, types.NewErrorResponse("MODULE_404", "Module not found", map[string]string{"vendor": vendor, "model": model}))
 }

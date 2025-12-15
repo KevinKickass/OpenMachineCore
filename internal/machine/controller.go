@@ -285,11 +285,27 @@ func (c *Controller) GetStatus() MachineStatus {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	// Build config if any workflow is configured
+	var config *MachineConfig
+	if c.stopWorkflowID != uuid.Nil || c.homeWorkflowID != uuid.Nil || c.productionWorkflowID != uuid.Nil {
+		config = &MachineConfig{}
+		if c.stopWorkflowID != uuid.Nil {
+			config.StopWorkflowID = c.stopWorkflowID.String()
+		}
+		if c.homeWorkflowID != uuid.Nil {
+			config.HomeWorkflowID = c.homeWorkflowID.String()
+		}
+		if c.productionWorkflowID != uuid.Nil {
+			config.ProductionWorkflowID = c.productionWorkflowID.String()
+		}
+	}
+
 	return MachineStatus{
 		State:            c.currentState,
 		ExecutionID:      c.currentExecID.String(),
 		ErrorMessage:     c.errorMessage,
 		ProductionCycles: c.productionCycles,
 		LastStateChange:  time.Now(),
+		Config:           config,
 	}
 }

@@ -24,10 +24,17 @@ const (
 )
 
 type MachineStatus struct {
-	State            State     `json:"state"`
-	CurrentWorkflow  string    `json:"current_workflow,omitempty"`
-	ExecutionID      string    `json:"execution_id,omitempty"`
-	ErrorMessage     string    `json:"error_message,omitempty"`
-	ProductionCycles int       `json:"production_cycles"`
-	LastStateChange  time.Time `json:"last_state_change"`
+	State            State          `json:"state"`
+	CurrentWorkflow  string         `json:"current_workflow,omitempty"`
+	ExecutionID      string         `json:"execution_id,omitempty"`
+	ErrorMessage     string         `json:"error_message,omitempty"`
+	ProductionCycles int            `json:"production_cycles"`
+	LastStateChange  time.Time      `json:"last_state_change"`
+	Config           *MachineConfig `json:"config,omitempty"`
+}
+
+type MachineConfig struct {
+	StopWorkflowID       string `json:"stop_workflow_id,omitempty"`
+	HomeWorkflowID       string `json:"home_workflow_id,omitempty"`
+	ProductionWorkflowID string `json:"production_workflow_id,omitempty"`
 }

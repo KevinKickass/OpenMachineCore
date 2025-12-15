@@ -41,7 +41,18 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 		ipAddress := c.ClientIP()
 		userAgent := c.GetHeader("User-Agent")
 
-		permissions, err := a.ValidateToken(c.Request.Context(), token, ipAddress, userAgent)
+		// Try JWT first to get user info
+		if claims, err := a.jwtHandler.ValidateAccessToken(token); err == nil {
+			c.Set("permissions", a.roleToPermissions(claims.Role))
+			c.Set("user_id", claims.UserID)
+			c.Set("username", claims.Username)
+			c.Set("role", claims.Role)
+			c.Next()
+			return
+		}
+
+		// Fall back to machine token (no user_id for machine tokens)
+		permissions, err := a.ValidateMachineToken(c.Request.Context(), token, ipAddress, userAgent)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "invalid or expired token",
@@ -50,7 +61,7 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Store permissions in context
+		// Store permissions in context (machine tokens don't have user_id)
 		c.Set("permissions", permissions)
 		c.Next()
 	}

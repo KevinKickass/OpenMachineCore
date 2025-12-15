@@ -21,9 +21,7 @@ func (s *Server) listWorkflows(c *gin.Context) {
 	workflows, err := s.lm.Storage().ListWorkflows(ctx)
 	if err != nil {
 		s.logger.Error("Failed to list workflows", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to list workflows",
-		})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("WORKFLOW_500", "Failed to list workflows", err.Error()))
 		return
 	}
 
@@ -39,9 +37,7 @@ func (s *Server) getWorkflow(c *gin.Context) {
 
 	workflowID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid workflow ID",
-		})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("WORKFLOW_400", "Invalid workflow ID", err.Error()))
 		return
 	}
 
@@ -50,9 +46,7 @@ func (s *Server) getWorkflow(c *gin.Context) {
 		s.logger.Error("Failed to load workflow",
 			zap.String("workflow_id", workflowID.String()),
 			zap.Error(err))
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Workflow not found",
-		})
+		c.JSON(http.StatusNotFound, types.NewErrorResponse("WORKFLOW_404", "Workflow not found", workflowID.String()))
 		return
 	}
 
@@ -124,20 +118,14 @@ func (s *Server) createWorkflow(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid request body",
-			"details": err.Error(),
-		})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("WORKFLOW_400", "Invalid request body", err.Error()))
 		return
 	}
 
 	// Validate workflow definition
 	_, err := definition.ParseWorkflow(req.Definition)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid workflow definition",
-			"details": err.Error(),
-		})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("WORKFLOW_400", "Invalid workflow definition", err.Error()))
 		return
 	}
 
@@ -149,9 +137,7 @@ func (s *Server) createWorkflow(c *gin.Context) {
 
 	if err := s.lm.Storage().SaveWorkflow(ctx, workflow, req.Compositions); err != nil {
 		s.logger.Error("Failed to create workflow", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to create workflow",
-		})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("WORKFLOW_500", "Failed to create workflow", err.Error()))
 		return
 	}
 
@@ -171,9 +157,7 @@ func (s *Server) updateWorkflow(c *gin.Context) {
 
 	workflowID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid workflow ID",
-		})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("WORKFLOW_400", "Invalid workflow ID", err.Error()))
 		return
 	}
 
@@ -184,18 +168,14 @@ func (s *Server) updateWorkflow(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
-		})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("WORKFLOW_400", "Invalid request body", err.Error()))
 		return
 	}
 
 	// Load existing workflow
 	workflow, _, err := s.lm.Storage().LoadWorkflow(ctx, workflowID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Workflow not found",
-		})
+		c.JSON(http.StatusNotFound, types.NewErrorResponse("WORKFLOW_404", "Workflow not found", workflowID.String()))
 		return
 	}
 
@@ -206,10 +186,7 @@ func (s *Server) updateWorkflow(c *gin.Context) {
 	if req.Definition != nil {
 		// Validate new definition
 		if _, err := definition.ParseWorkflow(req.Definition); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "Invalid workflow definition",
-				"details": err.Error(),
-			})
+			c.JSON(http.StatusBadRequest, types.NewErrorResponse("WORKFLOW_400", "Invalid workflow definition", err.Error()))
 			return
 		}
 		workflow.Definition = req.Definition
@@ -220,9 +197,7 @@ func (s *Server) updateWorkflow(c *gin.Context) {
 
 	if err := s.lm.Storage().UpdateWorkflow(ctx, workflow); err != nil {
 		s.logger.Error("Failed to update workflow", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update workflow",
-		})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("WORKFLOW_500", "Failed to update workflow", err.Error()))
 		return
 	}
 
@@ -239,17 +214,13 @@ func (s *Server) deleteWorkflow(c *gin.Context) {
 
 	workflowID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid workflow ID",
-		})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("WORKFLOW_400", "Invalid workflow ID", err.Error()))
 		return
 	}
 
 	if err := s.lm.Storage().DeleteWorkflow(ctx, workflowID); err != nil {
 		s.logger.Error("Failed to delete workflow", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete workflow",
-		})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("WORKFLOW_500", "Failed to delete workflow", err.Error()))
 		return
 	}
 
@@ -266,17 +237,13 @@ func (s *Server) activateWorkflow(c *gin.Context) {
 
 	workflowID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid workflow ID",
-		})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("WORKFLOW_400", "Invalid workflow ID", err.Error()))
 		return
 	}
 
 	if err := s.lm.Storage().ActivateWorkflow(ctx, workflowID); err != nil {
 		s.logger.Error("Failed to activate workflow", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to activate workflow",
-		})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("WORKFLOW_500", "Failed to activate workflow", err.Error()))
 		return
 	}
 
@@ -293,9 +260,7 @@ func (s *Server) executeWorkflow(c *gin.Context) {
 
 	workflowID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid workflow ID",
-		})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("WORKFLOW_400", "Invalid workflow ID", err.Error()))
 		return
 	}
 
@@ -310,10 +275,7 @@ func (s *Server) executeWorkflow(c *gin.Context) {
 		s.logger.Error("Failed to execute workflow",
 			zap.String("workflow_id", workflowID.String()),
 			zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to execute workflow",
-			"details": err.Error(),
-		})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("WORKFLOW_500", "Failed to execute workflow", err.Error()))
 		return
 	}
 
@@ -333,18 +295,14 @@ func (s *Server) getExecutionStatus(c *gin.Context) {
 
 	executionID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid execution ID",
-		})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("EXEC_400", "Invalid execution ID", err.Error()))
 		return
 	}
 
 	exec, steps, err := s.lm.WorkflowEngine().GetExecutionStatus(ctx, executionID)
 	if err != nil {
 		s.logger.Error("Failed to get execution status", zap.Error(err))
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Execution not found",
-		})
+		c.JSON(http.StatusNotFound, types.NewErrorResponse("EXEC_404", "Execution not found", executionID.String()))
 		return
 	}
 
@@ -360,18 +318,14 @@ func (s *Server) getExecutionSteps(c *gin.Context) {
 
 	executionID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid execution ID",
-		})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("EXEC_400", "Invalid execution ID", err.Error()))
 		return
 	}
 
 	steps, err := s.lm.Storage().GetExecutionSteps(ctx, executionID)
 	if err != nil {
 		s.logger.Error("Failed to get execution steps", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to get execution steps",
-		})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("EXEC_500", "Failed to get execution steps", err.Error()))
 		return
 	}
 

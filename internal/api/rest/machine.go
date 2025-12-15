@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/KevinKickass/OpenMachineCore/internal/machine"
+	"github.com/KevinKickass/OpenMachineCore/internal/types"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -22,7 +23,7 @@ func (s *Server) executeMachineCommand(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("MACHINE_400", "Invalid request body", err.Error()))
 		return
 	}
 
@@ -32,7 +33,7 @@ func (s *Server) executeMachineCommand(c *gin.Context) {
 		s.logger.Error("Machine command failed",
 			zap.String("command", req.Command),
 			zap.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("MACHINE_400", "Command execution failed", err.Error()))
 		return
 	}
 
@@ -51,25 +52,25 @@ func (s *Server) configureMachineWorkflows(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("MACHINE_400", "Invalid request body", err.Error()))
 		return
 	}
 
 	stopID, err := uuid.Parse(req.StopWorkflowID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid stop_workflow_id"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("MACHINE_400", "Invalid stop_workflow_id", err.Error()))
 		return
 	}
 
 	homeID, err := uuid.Parse(req.HomeWorkflowID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid home_workflow_id"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("MACHINE_400", "Invalid home_workflow_id", err.Error()))
 		return
 	}
 
 	productionID, err := uuid.Parse(req.ProductionWorkflowID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid production_workflow_id"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("MACHINE_400", "Invalid production_workflow_id", err.Error()))
 		return
 	}
 

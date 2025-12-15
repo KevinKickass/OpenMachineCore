@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/KevinKickass/OpenMachineCore/internal/auth"
+	"github.com/KevinKickass/OpenMachineCore/internal/types"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -57,7 +58,7 @@ type UpdateUserRequest struct {
 func (s *Server) login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("AUTH_400", "Invalid request body", err.Error()))
 		return
 	}
 
@@ -71,7 +72,7 @@ func (s *Server) login(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("AUTH_401", "Invalid credentials", nil))
 		return
 	}
 
@@ -86,7 +87,7 @@ func (s *Server) login(c *gin.Context) {
 func (s *Server) refreshToken(c *gin.Context) {
 	var req RefreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("AUTH_400", "Invalid request body", err.Error()))
 		return
 	}
 
@@ -97,7 +98,7 @@ func (s *Server) refreshToken(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
+		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("AUTH_401", "Invalid or expired refresh token", nil))
 		return
 	}
 
@@ -112,13 +113,13 @@ func (s *Server) refreshToken(c *gin.Context) {
 func (s *Server) logout(c *gin.Context) {
 	var req RefreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("AUTH_400", "Invalid request body", err.Error()))
 		return
 	}
 
 	authService := c.MustGet("authService").(*auth.AuthService)
 	if err := authService.RevokeRefreshToken(c.Request.Context(), req.RefreshToken); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to logout"})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("AUTH_500", "Failed to logout", err.Error()))
 		return
 	}
 
@@ -128,14 +129,14 @@ func (s *Server) logout(c *gin.Context) {
 func (s *Server) getCurrentUser(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		c.JSON(http.StatusUnauthorized, types.NewErrorResponse("AUTH_401", "Not authenticated", nil))
 		return
 	}
 
 	authService := c.MustGet("authService").(*auth.AuthService)
 	user, err := authService.GetUserByID(c.Request.Context(), userID.(uuid.UUID))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		c.JSON(http.StatusNotFound, types.NewErrorResponse("USER_404", "User not found", nil))
 		return
 	}
 
@@ -150,7 +151,7 @@ func (s *Server) getCurrentUser(c *gin.Context) {
 func (s *Server) createMachineToken(c *gin.Context) {
 	var req CreateMachineTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("TOKEN_400", "Invalid request body", err.Error()))
 		return
 	}
 
@@ -172,7 +173,7 @@ func (s *Server) createMachineToken(c *gin.Context) {
 
 	if err != nil {
 		s.logger.Error("Failed to create machine token", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create token"})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("TOKEN_500", "Failed to create token", err.Error()))
 		return
 	}
 
@@ -189,7 +190,7 @@ func (s *Server) listMachineTokens(c *gin.Context) {
 	authService := c.MustGet("authService").(*auth.AuthService)
 	tokens, err := authService.ListMachineTokens(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list tokens"})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("TOKEN_500", "Failed to list tokens", err.Error()))
 		return
 	}
 
@@ -199,13 +200,13 @@ func (s *Server) listMachineTokens(c *gin.Context) {
 func (s *Server) deleteMachineToken(c *gin.Context) {
 	tokenID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token id"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("TOKEN_400", "Invalid token ID", err.Error()))
 		return
 	}
 
 	authService := c.MustGet("authService").(*auth.AuthService)
 	if err := authService.DeleteMachineToken(c.Request.Context(), tokenID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete token"})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("TOKEN_500", "Failed to delete token", err.Error()))
 		return
 	}
 
@@ -215,7 +216,7 @@ func (s *Server) deleteMachineToken(c *gin.Context) {
 func (s *Server) updateMachineToken(c *gin.Context) {
 	tokenID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token id"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("TOKEN_400", "Invalid token ID", err.Error()))
 		return
 	}
 
@@ -225,13 +226,13 @@ func (s *Server) updateMachineToken(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("TOKEN_400", "Invalid request body", err.Error()))
 		return
 	}
 
 	authService := c.MustGet("authService").(*auth.AuthService)
 	if err := authService.UpdateMachineToken(c.Request.Context(), tokenID, req.Name, req.Metadata); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update token"})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("TOKEN_500", "Failed to update token", err.Error()))
 		return
 	}
 
@@ -242,14 +243,14 @@ func (s *Server) updateMachineToken(c *gin.Context) {
 func (s *Server) createUser(c *gin.Context) {
 	var req CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("USER_400", "Invalid request body", err.Error()))
 		return
 	}
 
 	authService := c.MustGet("authService").(*auth.AuthService)
 	user, err := authService.CreateUser(c.Request.Context(), req.Username, req.Password, req.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("USER_500", "Failed to create user", err.Error()))
 		return
 	}
 
@@ -260,7 +261,7 @@ func (s *Server) listUsers(c *gin.Context) {
 	authService := c.MustGet("authService").(*auth.AuthService)
 	users, err := authService.ListUsers(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list users"})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("USER_500", "Failed to list users", err.Error()))
 		return
 	}
 
@@ -270,19 +271,19 @@ func (s *Server) listUsers(c *gin.Context) {
 func (s *Server) updateUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("USER_400", "Invalid user ID", err.Error()))
 		return
 	}
 
 	var req UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("USER_400", "Invalid request body", err.Error()))
 		return
 	}
 
 	authService := c.MustGet("authService").(*auth.AuthService)
 	if err := authService.UpdateUser(c.Request.Context(), userID, req.Password, req.Role); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("USER_500", "Failed to update user", err.Error()))
 		return
 	}
 
@@ -292,13 +293,13 @@ func (s *Server) updateUser(c *gin.Context) {
 func (s *Server) deleteUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("USER_400", "Invalid user ID", err.Error()))
 		return
 	}
 
 	authService := c.MustGet("authService").(*auth.AuthService)
 	if err := authService.DeleteUser(c.Request.Context(), userID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("USER_500", "Failed to delete user", err.Error()))
 		return
 	}
 

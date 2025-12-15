@@ -81,6 +81,7 @@ func NewLifecycleManager(
 		eventStreamer:     eventStreamer,
 		workflowService:   workflowService,
 		machineController: machineController,
+		authService:       authService,
 		logger:            logger,
 		wsHub:             wsHub,
 		currentState:      StateInitializing,

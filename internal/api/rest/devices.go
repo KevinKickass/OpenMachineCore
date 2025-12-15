@@ -1,7 +1,6 @@
 package rest
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -36,13 +35,13 @@ func (s *Server) getDevice(c *gin.Context) {
 	idStr := c.Param("id")
 	deviceID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid device ID"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("DEVICE_400", "Invalid device ID", err.Error()))
 		return
 	}
 
 	device, exists := s.lm.DeviceManager().GetDevice(deviceID)
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+		c.JSON(http.StatusNotFound, types.NewErrorResponse("DEVICE_404", "Device not found", deviceID.String()))
 		return
 	}
 
@@ -64,7 +63,7 @@ func (s *Server) createDevice(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("DEVICE_400", "Invalid request body", err.Error()))
 		return
 	}
 
@@ -77,14 +76,14 @@ func (s *Server) createDevice(c *gin.Context) {
 	// Save to database first (upsert)
 	deviceID, err := s.lm.Storage().SaveOrUpdateDeviceComposition(c.Request.Context(), comp)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to save device: %v", err)})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("DEVICE_500", "Failed to save device", err.Error()))
 		return
 	}
 
 	// Load device from composition
 	device, err := s.lm.DeviceManager().LoadDeviceFromComposition(comp, 2*time.Second)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("DEVICE_500", "Failed to load device", err.Error()))
 		return
 	}
 
@@ -109,7 +108,7 @@ func (s *Server) deleteDevice(c *gin.Context) {
 	// Get device first
 	device, exists := s.lm.DeviceManager().GetDeviceByName(instanceID)
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+		c.JSON(http.StatusNotFound, types.NewErrorResponse("DEVICE_404", "Device not found", instanceID))
 		return
 	}
 
@@ -120,7 +119,7 @@ func (s *Server) deleteDevice(c *gin.Context) {
 
 	// Delete from database
 	if err := s.lm.Storage().DeleteDevice(c.Request.Context(), instanceID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete from database: %v", err)})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("DEVICE_500", "Failed to delete device", err.Error()))
 		return
 	}
 
@@ -134,7 +133,7 @@ func (s *Server) readRegister(c *gin.Context) {
 	idStr := c.Param("id")
 	deviceID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid device ID"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("DEVICE_400", "Invalid device ID", err.Error()))
 		return
 	}
 
@@ -143,19 +142,19 @@ func (s *Server) readRegister(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("DEVICE_400", "Invalid request body", err.Error()))
 		return
 	}
 
 	device, exists := s.lm.DeviceManager().GetDevice(deviceID)
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+		c.JSON(http.StatusNotFound, types.NewErrorResponse("DEVICE_404", "Device not found", deviceID.String()))
 		return
 	}
 
 	value, err := device.ReadLogical(c.Request.Context(), req.Register)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("DEVICE_500", "Failed to read register", err.Error()))
 		return
 	}
 
@@ -171,7 +170,7 @@ func (s *Server) writeRegister(c *gin.Context) {
 	idStr := c.Param("id")
 	deviceID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid device ID"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("DEVICE_400", "Invalid device ID", err.Error()))
 		return
 	}
 
@@ -181,18 +180,18 @@ func (s *Server) writeRegister(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("DEVICE_400", "Invalid request body", err.Error()))
 		return
 	}
 
 	device, exists := s.lm.DeviceManager().GetDevice(deviceID)
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+		c.JSON(http.StatusNotFound, types.NewErrorResponse("DEVICE_404", "Device not found", deviceID.String()))
 		return
 	}
 
 	if err := device.WriteLogical(c.Request.Context(), req.Register, req.Value); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("DEVICE_500", "Failed to write register", err.Error()))
 		return
 	}
 

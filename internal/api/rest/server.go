@@ -10,6 +10,7 @@ import (
 	"github.com/KevinKickass/OpenMachineCore/internal/auth"
 	"github.com/KevinKickass/OpenMachineCore/internal/config"
 	"github.com/KevinKickass/OpenMachineCore/internal/interfaces"
+	"github.com/KevinKickass/OpenMachineCore/internal/types"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -224,19 +225,19 @@ func (s *Server) cancelExecution(c *gin.Context) {
 	// Parse UUID
 	execUUID, err := uuid.Parse(executionID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid execution id"})
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse("EXEC_400", "Invalid execution ID", err.Error()))
 		return
 	}
 
 	// Get workflow engine from lifecycle manager
 	engine := s.lm.WorkflowEngine()
 	if engine == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "workflow engine not available"})
+		c.JSON(http.StatusServiceUnavailable, types.NewErrorResponse("WORKFLOW_503", "Workflow engine not available", nil))
 		return
 	}
 
 	if err := engine.CancelExecution(c.Request.Context(), execUUID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse("EXEC_500", "Failed to cancel execution", err.Error()))
 		return
 	}
 
