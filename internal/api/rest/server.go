@@ -150,6 +150,7 @@ func (s *Server) setupRoutes() {
 			workflows.GET("", auth.RequirePermission(auth.PermOperator), s.listWorkflows)
 			workflows.GET("/:id", auth.RequirePermission(auth.PermOperator), s.getWorkflow)
 			workflows.POST("/:id/execute", auth.RequirePermission(auth.PermOperator), s.executeWorkflow)
+			workflows.POST("/:id/validate", auth.RequirePermission(auth.PermOperator), s.validateWorkflow)
 
 			// Modify: Admin only
 			workflows.POST("", auth.RequirePermission(auth.PermAdmin), s.createWorkflow)

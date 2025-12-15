@@ -253,6 +253,31 @@ func (p *PostgresClient) ActivateWorkflow(ctx context.Context, workflowID uuid.U
 	return tx.Commit(ctx)
 }
 
+// WorkflowExists checks if a workflow exists by ID.
+func (p *PostgresClient) WorkflowExists(ctx context.Context, id uuid.UUID) (bool, error) {
+	var one int
+	err := p.pool.QueryRow(ctx, `SELECT 1 FROM workflows WHERE id = $1`, id).Scan(&one)
+	if err == nil {
+		return true, nil
+	}
+	if err == pgx.ErrNoRows {
+		return false, nil
+	}
+	return false, fmt.Errorf("workflow exists query failed: %w", err)
+}
+
+// DeviceExistsEnabledByName checks if a device exists by device_name and returns enabled state.
+func (p *PostgresClient) DeviceExistsEnabledByName(ctx context.Context, deviceName string) (exists bool, enabled bool, err error) {
+	err = p.pool.QueryRow(ctx, `SELECT enabled FROM devices WHERE device_name = $1`, deviceName).Scan(&enabled)
+	if err == nil {
+		return true, enabled, nil
+	}
+	if err == pgx.ErrNoRows {
+		return false, false, nil
+	}
+	return false, false, fmt.Errorf("device exists query failed: %w", err)
+}
+
 // CreateExecution creates a new workflow execution record
 func (p *PostgresClient) CreateExecution(ctx context.Context, exec *WorkflowExecution) error {
 	_, err := p.pool.Exec(ctx, `

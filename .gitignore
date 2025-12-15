@@ -88,3 +88,6 @@ scratch/
 
 # Generated protobuf files
 api/proto/*.pb.go
+
+# AI assistant files
+CLAUDE.md

@@ -6,7 +6,9 @@ import (
 
 	"github.com/KevinKickass/OpenMachineCore/internal/storage"
 	"github.com/KevinKickass/OpenMachineCore/internal/types"
+	"github.com/KevinKickass/OpenMachineCore/internal/workflow"
 	"github.com/KevinKickass/OpenMachineCore/internal/workflow/definition"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -58,6 +60,56 @@ func (s *Server) getWorkflow(c *gin.Context) {
 		"workflow":     workflow,
 		"compositions": compositions,
 	})
+}
+
+// POST /api/v1/workflows/:id/validate
+func (s *Server) validateWorkflow(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	workflowID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.NewErrorResponse(
+			"WORKFLOW_400",
+			"Invalid workflow ID",
+			err.Error(),
+		))
+		return
+	}
+
+	exists, err := s.lm.Storage().WorkflowExists(ctx, workflowID)
+	if err != nil {
+		s.logger.Error("Failed to check workflow existence", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse(
+			"WORKFLOW_500",
+			"Failed to validate workflow",
+			err.Error(),
+		))
+		return
+	}
+	if !exists {
+		c.JSON(http.StatusNotFound, types.NewErrorResponse(
+			"WORKFLOW_404",
+			"Workflow not found",
+			workflowID.String(),
+		))
+		return
+	}
+
+	v := workflow.NewValidator(s.lm.Storage())
+	report, err := v.ValidateByID(ctx, workflowID)
+	if err != nil {
+		// echtes Infrastrukturproblem (LoadWorkflow kaputt o.ä.)
+		s.logger.Error("Validator failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, types.NewErrorResponse(
+			"WORKFLOW_500",
+			"Failed to validate workflow",
+			err.Error(),
+		))
+		return
+	}
+
+	// 200 immer, auch wenn invalid
+	c.JSON(http.StatusOK, report)
 }
 
 // POST /api/v1/workflows
